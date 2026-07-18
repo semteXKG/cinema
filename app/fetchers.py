@@ -54,19 +54,16 @@ class HttpClient:
         return self._get(url, headers=headers, params=None).text
 
     def _get(self, url, headers, params):
-        last_error: Exception | None = None
-        for _ in range(2):
-            try:
-                resp = self._session.get(
-                    url, headers=headers, params=params, timeout=20
-                )
-                resp.raise_for_status()
-                if self._delay_s:
-                    time.sleep(self._delay_s)
-                return resp
-            except requests.RequestException as e:
-                last_error = e
-        raise SourceError(f"GET {url} failed: {last_error}") from last_error
+        try:
+            resp = self._session.get(
+                url, headers=headers, params=params, timeout=20
+            )
+            resp.raise_for_status()
+            if self._delay_s:
+                time.sleep(self._delay_s)
+            return resp
+        except requests.RequestException as e:
+            raise SourceError(f"GET {url} failed: {e}") from e
 
 
 def fetch_cineplexx(http) -> list[Showing]:
