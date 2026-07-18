@@ -3,15 +3,111 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import requests
 from bs4 import BeautifulSoup
 
 from .models import Showing, cineplexx_session_version, megaplex_version
 
+CINEPLEXX_BASE = "https://app.cineplexx.at"
+CINEPLEXX_HEADERS = {
+    "CINEPLEXX-Platform": "WEB",
+    "client-key": "308330b1-52a5-4883-aee3-304240c22ea1",
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    ),
+}
+
 CINEPLEXX_CINEMA_ID = "1014"
 CINEPLEXX_CINEMA_NAME = "Cineplexx Linz"
+
+MEGAPLEX_DAYS = 14
+MEGAPLEX_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    ),
+}
+
+
+class SourceError(Exception):
+    """A cinema source returned something structurally unexpected."""
+
+
+class HttpClient:
+    def __init__(self, delay_s: float = 0.0):
+        self._session = requests.Session()
+        self._delay_s = delay_s
+
+    def get_json(self, url, headers=None, params=None):
+        resp = self._get(url, headers=headers, params=params)
+        try:
+            return resp.json()
+        except ValueError as e:
+            raise SourceError(f"no JSON from {url}") from e
+
+    def get_text(self, url, headers=None):
+        return self._get(url, headers=headers, params=None).text
+
+    def _get(self, url, headers, params):
+        last_error: Exception | None = None
+        for _ in range(2):
+            try:
+                resp = self._session.get(
+                    url, headers=headers, params=params, timeout=20
+                )
+                resp.raise_for_status()
+                if self._delay_s:
+                    time.sleep(self._delay_s)
+                return resp
+            except requests.RequestException as e:
+                last_error = e
+        raise SourceError(f"GET {url} failed: {last_error}") from last_error
+
+
+def fetch_cineplexx(http) -> list[Showing]:
+    movies = http.get_json(
+        f"{CINEPLEXX_BASE}/api/v1/cinemasweb/{CINEPLEXX_CINEMA_ID}/movies",
+        headers=CINEPLEXX_HEADERS,
+        params={"date": "all"},
+    )
+    if not isinstance(movies, list) or not movies:
+        raise SourceError("Cineplexx: empty or invalid movie list")
+    sessions_by_movie = {}
+    for movie in movies:
+        data = http.get_json(
+            f"{CINEPLEXX_BASE}/api/v2/moviesweb/{movie['id']}/sessions",
+            headers=CINEPLEXX_HEADERS,
+            params={"location": "AUT"},
+        )
+        if not isinstance(data, list):
+            raise SourceError(f"Cineplexx: invalid sessions for {movie['id']}")
+        sessions_by_movie[movie["id"]] = data
+    return parse_cineplexx_showings(movies, sessions_by_movie)
+
+
+def fetch_megaplex(http, today: date) -> list[Showing]:
+    links: list[str] = []
+    for i in range(MEGAPLEX_DAYS):
+        day = today + timedelta(days=i)
+        html = http.get_text(
+            f"{MEGAPLEX_BASE}/kinoprogramm/linz/{day.isoformat()}/ov",
+            headers=MEGAPLEX_HEADERS,
+        )
+        if "Kinoprogramm" not in html:
+            raise SourceError(f"Megaplex: unexpected program page for {day}")
+        for url in parse_megaplex_ov_links(html):
+            if url not in links:
+                links.append(url)
+    showings: list[Showing] = []
+    for url in links:
+        html = http.get_text(url, headers=MEGAPLEX_HEADERS)
+        showings.extend(parse_megaplex_film_page(html, url, today))
+    return showings
 
 
 def parse_cineplexx_showings(
@@ -49,10 +145,6 @@ _TZ = ZoneInfo("Europe/Vienna")
 _OV_LINK_RE = re.compile(r"^/film/linz/[^/]+/ov$")
 _DAY_RE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
 _TIME_RE = re.compile(r"(\d{1,2}):(\d{2})")
-
-
-class SourceError(Exception):
-    """A cinema source returned something structurally unexpected."""
 
 
 def parse_megaplex_ov_links(html: str) -> list[str]:
