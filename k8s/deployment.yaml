@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ov-watcher
+  labels:
+    app: ov-watcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ov-watcher
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ov-watcher
+    spec:
+      containers:
+        - name: ov-watcher
+          image: cinema-ov-watcher:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: ov-watcher-config
+            - secretRef:
+                name: ov-watcher-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ov-watcher-data

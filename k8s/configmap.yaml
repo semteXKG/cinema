@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ov-watcher-config
+data:
+  CHECK_INTERVAL_HOURS: "3"
+  SOURCES: "cineplexx,megaplex"
