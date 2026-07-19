@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ov-watcher-config
+data:
+  CHECK_INTERVAL_HOURS: "{{ .Values.config.checkIntervalHours }}"
+  SOURCES: "{{ .Values.config.sources }}"
