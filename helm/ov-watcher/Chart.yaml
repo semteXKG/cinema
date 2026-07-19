@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ov-watcher
+description: Cinema OV/OmU watcher — scans cinema listings and sends Telegram alerts
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

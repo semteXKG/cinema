@@ -1,0 +1,29 @@
+image:
+  repository: ghcr.io/semtexkg/cinema
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+persistence:
+  create: true
+
+config:
+  checkIntervalHours: "3"
+  sources: "cineplexx,megaplex"
+
+secrets:
+  telegramBotToken: ""
+  telegramChatId: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+ingress:
+  host: cinema.k-labs.app
