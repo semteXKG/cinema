@@ -66,6 +66,9 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
       - name: Set image tag
         id: tag
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
