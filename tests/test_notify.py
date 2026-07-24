@@ -52,3 +52,36 @@ def test_send_telegram_posts_payload():
         ("https://api.telegram.org/botTOKEN/sendMessage",
          {"chat_id": "123", "text": "hello"}, 20)
     ]
+
+
+def run_send(text):
+    calls = []
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+    def fake_post(url, json, timeout):
+        calls.append(json["text"])
+        return Resp()
+
+    send_telegram("TOKEN", "123", text, post=fake_post)
+    return calls
+
+
+def test_send_telegram_splits_long_messages_on_line_boundaries():
+    lines = [f"line {i} " + "x" * 90 for i in range(200)]  # ~20k chars total
+    text = "\n".join(lines)
+    chunks = run_send(text)
+    assert len(chunks) > 1
+    assert all(len(c) <= 4096 for c in chunks)
+    # every line survives, in order, exactly once
+    assert "\n".join(chunks).split("\n") == lines
+
+
+def test_send_telegram_hard_wraps_single_overlong_line():
+    text = "y" * 5000
+    chunks = run_send(text)
+    assert len(chunks) == 2
+    assert all(len(c) <= 4096 for c in chunks)
+    assert "".join(chunks) == text
