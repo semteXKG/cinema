@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build
 
 on:
   push:
@@ -52,35 +52,3 @@ jobs:
             org.opencontainers.image.created=${{ steps.meta.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-
-  deploy:
-    needs: build
-    runs-on: arc-runner-cinema
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Set image tag
-        id: tag
-        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Deploy with Helm
-        run: |
-          helm upgrade --install ov-watcher ./helm/ov-watcher \
-            --namespace default \
-            --set image.tag=${{ steps.tag.outputs.sha }} \
-            --set persistence.create=false \
-            --set secrets.telegramBotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
-            --set secrets.telegramChatId="${{ secrets.TELEGRAM_CHAT_ID }}"
-
-      - name: Verify rollout
-        run: kubectl rollout status deployment/ov-watcher -n default --timeout=120s
