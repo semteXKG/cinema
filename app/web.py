@@ -23,26 +23,31 @@ _TEMPLATE = """<!doctype html>
  h1{color:#e6b34d;font-size:1.4rem}
  h2{color:#ba9765;font-size:1.05rem;margin:1.2rem 0 .4rem}
  .card{background:#1e1e2a;border:1px solid #333;border-radius:8px;padding:.6rem .9rem;margin:.4rem 0}
- .badge{display:inline-block;background:#e61961;color:#fff;border-radius:4px;padding:0 .4rem;font-size:.75rem;margin-right:.5rem}
+ .badge{display:inline-block;background:#e61961;color:#fff;border-radius:4px;padding:0 .4rem;font-size:.75rem;margin-left:.5rem}
  a{color:#7fb3ff;text-decoration:none}
+ a.showing{display:block;color:#eee;padding:.2rem .3rem;border-radius:4px}
+ a.showing:hover{background:#2a2a3a}
+ a.showing .when{color:#e6b34d;display:inline-block;min-width:8.5rem}
+ a.showing .detail{color:#999;font-size:.85rem}
  .meta{color:#888;font-size:.8rem;margin-top:1.5rem}
  .ok{color:#6f6}.err{color:#f66}
 </style>
 </head>
 <body>
 <h1>🎬 OV-Vorstellungen in Linz</h1>
-{% if days is none %}
+{% if cinemas is none %}
   <p>Noch keine Daten — der erste Check läuft gerade.</p>
-{% elif not days %}
+{% elif not cinemas %}
   <p>Aktuell keine OV-Vorstellungen gefunden.</p>
 {% else %}
-  {% for day, items in days %}
-  <h2>{{ day }}</h2>
-    {% for s in items %}
+  {% for c in cinemas %}
+  <h2>{{ c.name }}</h2>
+    {% for m in c.movies %}
     <div class="card">
-      <span class="badge">{{ s.version }}</span>
-      <strong>{{ s.movie }}</strong> — {{ s.time }}{% if s.hall %}, {{ s.hall }}{% endif %} · {{ s.cinema }}<br>
-      <a href="{{ s.url }}">Tickets →</a>
+      <strong>{{ m.movie }}</strong>{% if m.badge %}<span class="badge">{{ m.badge }}</span>{% endif %}
+      {% for s in m.showings %}
+      <a class="showing" href="{{ s.url }}"><span class="when">{{ s.date }} · {{ s.time }}</span>{% if s.detail %}<span class="detail">{{ s.detail }}</span>{% endif %}</a>
+      {% endfor %}
     </div>
     {% endfor %}
   {% endfor %}
@@ -57,6 +62,53 @@ _TEMPLATE = """<!doctype html>
 """
 
 
+def _short_version(version: str) -> str:
+    """Strip the redundant leading 'OV'/'OV - ' prefix (page lists only OV)."""
+    v = version.strip()
+    if v == "OV":
+        return ""
+    if v.startswith("OV - "):
+        return v[5:].strip()
+    return v
+
+
+def _group_showings(showings: list[dict]) -> list[dict]:
+    """Group flat showing dicts into cinema -> movie -> showing rows."""
+    parsed = sorted(
+        ((datetime.fromisoformat(s["start"]), s) for s in showings),
+        key=lambda x: x[0],
+    )
+    by_cinema: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for start, s in parsed:
+        by_cinema[s["cinema"]][s["movie"]].append((start, s))
+
+    cinemas = []
+    for cinema in sorted(by_cinema):
+        movies = []
+        for movie, entries in by_cinema[cinema].items():
+            versions = {s["version"] for _, s in entries}
+            badge = next(iter(versions)) if len(versions) == 1 else None
+            rows = []
+            for start, s in entries:
+                parts = []
+                if badge is None:
+                    parts.append(_short_version(s["version"]) or s["version"])
+                if s.get("hall"):
+                    parts.append(s["hall"])
+                rows.append(
+                    {
+                        "date": f"{_WEEKDAYS[start.weekday()]} {start:%d.%m}.",
+                        "time": f"{start:%H:%M}",
+                        "detail": ", ".join(parts),
+                        "url": s["url"],
+                    }
+                )
+            movies.append((entries[0][0], {"movie": movie, "badge": badge, "showings": rows}))
+        movies.sort(key=lambda t: t[0])
+        cinemas.append({"name": cinema, "movies": [m for _, m in movies]})
+    return cinemas
+
+
 def create_app(data_dir) -> Flask:
     app = Flask(__name__)
 
@@ -67,35 +119,15 @@ def create_app(data_dir) -> Flask:
     @app.route("/")
     def index():
         payload = state_mod.load_showings(data_dir)
-        days = None
+        cinemas = None
         generated_at = "–"
         sources: dict = {}
         if payload:
             generated_at = payload.get("generated_at", "–")
             sources = payload.get("sources") or {}
-            parsed = []
-            for s in payload.get("showings", []):
-                parsed.append((datetime.fromisoformat(s["start"]), s))
-            parsed.sort(key=lambda x: x[0])
-            grouped: dict[str, list] = defaultdict(list)
-            order: list[str] = []
-            for start, s in parsed:
-                label = f"{_WEEKDAYS[start.weekday()]} {start:%d.%m.%Y}"
-                if label not in grouped:
-                    order.append(label)
-                grouped[label].append(
-                    {
-                        "time": f"{start:%H:%M}",
-                        "movie": s["movie"],
-                        "version": s["version"],
-                        "hall": s.get("hall") or "",
-                        "cinema": s["cinema"],
-                        "url": s["url"],
-                    }
-                )
-            days = [(label, grouped[label]) for label in order]
+            cinemas = _group_showings(payload.get("showings", []))
         return render_template_string(
-            _TEMPLATE, days=days, generated_at=generated_at, sources=sources
+            _TEMPLATE, cinemas=cinemas, generated_at=generated_at, sources=sources
         )
 
     return app
