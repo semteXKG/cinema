@@ -78,7 +78,6 @@ jobs:
           helm upgrade --install ov-watcher ./helm/ov-watcher \
             --namespace default \
             --set image.tag=${{ steps.tag.outputs.sha }} \
-            --set persistence.create=false \
             --set secrets.telegramBotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
             --set secrets.telegramChatId="${{ secrets.TELEGRAM_CHAT_ID }}"
 
