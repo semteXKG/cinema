@@ -15,11 +15,15 @@ jobs:
           🎬 <b>Neue OV-Vorstellungen in Linz</b> (Demo)
 
           <b>Cineplexx Linz</b>
-          • <a href="https://cineplexx.at/film/die-odyssee">The Odyssey</a> (OV) — Mo 20.07., 19:00 · Saal 6
-          • <a href="https://cineplexx.at/film/f1">F1</a> (OmU) — Di 21.07., 20:15
+          <b>The Odyssey (OV)</b>
+          • <a href="https://cineplexx.at/film/die-odyssee">Saal 6 · Mo 20.07., 19:00</a>
+          • <a href="https://cineplexx.at/film/die-odyssee">Saal 3 · Di 21.07., 20:15</a>
+          <b>F1 (OmU)</b>
+          • <a href="https://cineplexx.at/film/f1">Saal 2 · Di 21.07., 20:15</a>
 
           <b>Megaplex PlusCity</b>
-          • <a href="https://www.megaplex.at/ticket/57419/539128">Die Odyssee</a> (OV - IMAX 2D) — Mo 20.07., 19:45
+          <b>Die Odyssee (OV - IMAX 2D)</b>
+          • <a href="https://www.megaplex.at/ticket/57419/539128">Mo 20.07., 19:45</a>
           EOF
           )
           curl -sS -f "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
