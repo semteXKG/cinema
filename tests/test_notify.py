@@ -20,20 +20,43 @@ def test_format_message_groups_by_cinema_and_formats_german():
     ]
     msg = format_message(showings)
     lines = msg.split("\n")
-    assert lines[0] == "🎬 Neue OV-Vorstellungen in Linz!"
+    assert lines[0] == "🎬 <b>Neue OV-Vorstellungen in Linz</b>"
     # cinemas sorted alphabetically: Cineplexx before Megaplex
-    assert lines.index("Cineplexx Linz") < lines.index("Megaplex PlusCity")
-    # 2026-07-20 is a Monday -> "Mo 20.07."
-    assert "• The Odyssey (OV) — Mo 20.07., 19:00, Saal 6" in msg
-    assert "• Die Odyssee (OV - IMAX 2D) — Mo 20.07., 19:45" in msg
-    assert "https://cineplexx.at/film/die-odyssee" in msg
-    assert "https://www.megaplex.at/ticket/57419/539128" in msg
+    assert lines.index("<b>Cineplexx Linz</b>") < lines.index("<b>Megaplex PlusCity</b>")
+    # 2026-07-20 is a Monday -> "Mo 20.07."; title links to booking page
+    assert (
+        '• <a href="https://cineplexx.at/film/die-odyssee">The Odyssey</a> '
+        "(OV) — Mo 20.07., 19:00 · Saal 6" in msg
+    )
+    assert (
+        '• <a href="https://www.megaplex.at/ticket/57419/539128">Die Odyssee</a> '
+        "(OV - IMAX 2D) — Mo 20.07., 19:45" in msg
+    )
+    # no bare URLs on their own lines anymore
+    assert not any(line.startswith("http") for line in lines)
+
+
+def test_format_message_escapes_html():
+    showings = [
+        make("Cineplexx Linz", "Fast & Furious <Final>", 20, 20, 0, "OV",
+             url="https://x.at/film?a=1&b=2"),
+    ]
+    msg = format_message(showings)
+    assert "Fast &amp; Furious &lt;Final&gt;" in msg
+    assert 'href="https://x.at/film?a=1&amp;b=2"' in msg
+    assert "Fast & Furious" not in msg
 
 
 def test_format_error():
     msg = format_error("Megaplex", ValueError("boom"))
     assert "Megaplex" in msg
     assert "boom" in msg
+
+
+def test_format_error_escapes_html():
+    msg = format_error("Cineplexx", ValueError("<Response [500]> & stuff"))
+    assert "&lt;Response [500]&gt; &amp; stuff" in msg
+    assert "<Response [500]>" not in msg
 
 
 def test_send_telegram_posts_payload():
@@ -50,7 +73,8 @@ def test_send_telegram_posts_payload():
     send_telegram("TOKEN", "123", "hello", post=fake_post)
     assert calls == [
         ("https://api.telegram.org/botTOKEN/sendMessage",
-         {"chat_id": "123", "text": "hello"}, 20)
+         {"chat_id": "123", "text": "hello", "parse_mode": "HTML",
+          "link_preview_options": {"is_disabled": True}}, 20)
     ]
 
 
