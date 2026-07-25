@@ -11,6 +11,19 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
+          MSG=$(cat <<'EOF'
+          🎬 <b>Neue OV-Vorstellungen in Linz</b> (Demo)
+
+          <b>Cineplexx Linz</b>
+          • <a href="https://cineplexx.at/film/die-odyssee">The Odyssey</a> (OV) — Mo 20.07., 19:00 · Saal 6
+          • <a href="https://cineplexx.at/film/f1">F1</a> (OmU) — Di 21.07., 20:15
+
+          <b>Megaplex PlusCity</b>
+          • <a href="https://www.megaplex.at/ticket/57419/539128">Die Odyssee</a> (OV - IMAX 2D) — Mo 20.07., 19:45
+          EOF
+          )
           curl -sS -f "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode chat_id=@ov_linz \
-            --data-urlencode text="✅ Testnachricht vom OV-Watcher: Der Bot postet ab jetzt hier im Kanal."
+            --data-urlencode parse_mode=HTML \
+            --data-urlencode 'link_preview_options={"is_disabled":true}' \
+            --data-urlencode "text=${MSG}"
