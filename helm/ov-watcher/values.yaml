@@ -15,7 +15,8 @@ config:
 
 secrets:
   telegramBotToken: ""
-  telegramChatId: ""
+  # Öffentlicher Kanal: Chat-ID ist der @-Name (Bot muss Kanal-Admin sein).
+  telegramChatId: "@ov_linz"
 
 resources:
   requests:
