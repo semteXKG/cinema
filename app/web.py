@@ -177,13 +177,16 @@ def _group_showings(showings: list[dict]) -> list[dict]:
     for cinema in sorted(by_cinema, key=_cinema_key):
         movies = []
         for movie, entries in by_cinema[cinema].items():
-            versions = {s["version"] for _, s in entries}
-            badge = next(iter(versions)) if len(versions) == 1 else None
+            bases = {s["version"].split(" - ")[0].strip() for _, s in entries}
+            badge = next(iter(bases)) if len(bases) == 1 else None
             rows = []
             for start, s in entries:
                 parts = []
+                variant = _short_version(s["version"])
                 if badge is None:
-                    parts.append(_short_version(s["version"]) or s["version"])
+                    parts.append(variant or s["version"])
+                elif variant:
+                    parts.append(variant)
                 if s.get("hall"):
                     parts.append(s["hall"])
                 rows.append(

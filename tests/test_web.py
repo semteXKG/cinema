@@ -65,7 +65,7 @@ def test_index_badge_once_when_versions_match(tmp_path):
     assert "Saal 7" in html and "Dolby Cinema" in html
 
 
-def test_index_per_showing_version_when_versions_differ(tmp_path):
+def test_index_ov_badge_when_only_variants_differ(tmp_path):
     write_payload(tmp_path, [
         {"cinema": "Megaplex PlusCity", "movie": "Die Odyssee",
          "start": "2026-07-20T19:45:00+02:00", "version": "OV - Dolby Vision 2D",
@@ -75,7 +75,8 @@ def test_index_per_showing_version_when_versions_differ(tmp_path):
          "hall": "", "url": "https://www.megaplex.at/ticket/2"},
     ])
     html = create_app(tmp_path).test_client().get("/").data.decode()
-    assert 'class="badge"' not in html
+    # all showings are OV -> movie gets the OV badge; variants stay per row
+    assert '<span class="badge">OV</span>' in html
     assert "Dolby Vision 2D" in html and "IMAX 2D" in html
     assert "OV - " not in html
 
@@ -93,6 +94,19 @@ def test_index_mixed_versions_keep_plain_ov_label(tmp_path):
     assert 'class="badge"' not in html
     # plain "OV" showing keeps an explicit label so it stays distinguishable
     assert ">OV<" in html and ">OmU<" in html
+
+
+def test_index_single_variant_badges_ov_labels_row(tmp_path):
+    write_payload(tmp_path, [
+        {"cinema": "Megaplex PlusCity", "movie": "Toy Story 5",
+         "start": "2026-07-23T19:30:00+02:00", "version": "OV - Dolby Atmos 3D",
+         "hall": "", "url": "https://www.megaplex.at/ticket/1"},
+    ])
+    html = create_app(tmp_path).test_client().get("/").data.decode()
+    # badge is the base version; the variant moves to the showing row
+    assert '<span class="badge">OV</span>' in html
+    assert "Dolby Atmos 3D" in html
+    assert "OV - " not in html
 
 
 def test_movies_ordered_by_earliest_showing(tmp_path):
