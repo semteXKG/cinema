@@ -36,8 +36,8 @@ def test_index_groups_by_cinema_and_movie(tmp_path):
     ])
     client = create_app(tmp_path).test_client()
     html = client.get("/").data.decode()
-    # cinema headings, alphabetical order
-    assert html.index("<h2>Cineplexx Linz</h2>") < html.index("<h2>Megaplex PlusCity</h2>")
+    # cinema headings, preferred order: Megaplex before Cineplexx
+    assert html.index("<h2>Megaplex PlusCity</h2>") < html.index("<h2>Cineplexx Linz</h2>")
     # one card per movie: title appears exactly once for two showings
     assert html.count("The Odyssey") == 1
     # both showings present as rows with their own dates

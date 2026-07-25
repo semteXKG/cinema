@@ -11,6 +11,9 @@ from . import state as state_mod
 
 _WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
+# Cinemas listed here render first, in this order; the rest alphabetically.
+_CINEMA_ORDER = ("Megaplex PlusCity",)
+
 _TEMPLATE = """<!doctype html>
 <html lang="de">
 <head>
@@ -155,6 +158,11 @@ def _short_version(version: str) -> str:
     return v
 
 
+def _cinema_key(name: str) -> tuple:
+    preferred = _CINEMA_ORDER.index(name) if name in _CINEMA_ORDER else len(_CINEMA_ORDER)
+    return (preferred, name)
+
+
 def _group_showings(showings: list[dict]) -> list[dict]:
     """Group flat showing dicts into cinema -> movie -> showing rows."""
     parsed = sorted(
@@ -166,7 +174,7 @@ def _group_showings(showings: list[dict]) -> list[dict]:
         by_cinema[s["cinema"]][s["movie"]].append((start, s))
 
     cinemas = []
-    for cinema in sorted(by_cinema):
+    for cinema in sorted(by_cinema, key=_cinema_key):
         movies = []
         for movie, entries in by_cinema[cinema].items():
             versions = {s["version"] for _, s in entries}
