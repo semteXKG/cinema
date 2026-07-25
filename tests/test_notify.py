@@ -11,10 +11,13 @@ def make(cinema, movie, day, hour, minute, version, hall="", url="https://x"):
     return Showing(cinema, movie, datetime(2026, 7, day, hour, minute, tzinfo=TZ), version, hall, url)
 
 
-def test_format_message_groups_by_cinema_and_formats_german():
+def test_format_message_groups_showings_under_movie_titles():
     showings = [
         make("Megaplex PlusCity", "Die Odyssee", 20, 19, 45, "OV - IMAX 2D",
              url="https://www.megaplex.at/ticket/57419/539128"),
+        # two showings of the same movie, listed out of order
+        make("Cineplexx Linz", "The Odyssey", 21, 20, 15, "OV", hall="Saal 3",
+             url="https://cineplexx.at/film/die-odyssee"),
         make("Cineplexx Linz", "The Odyssey", 20, 19, 0, "OV", hall="Saal 6",
              url="https://cineplexx.at/film/die-odyssee"),
     ]
@@ -23,17 +26,34 @@ def test_format_message_groups_by_cinema_and_formats_german():
     assert lines[0] == "🎬 <b>Neue OV-Vorstellungen in Linz</b>"
     # cinemas sorted alphabetically: Cineplexx before Megaplex
     assert lines.index("<b>Cineplexx Linz</b>") < lines.index("<b>Megaplex PlusCity</b>")
-    # 2026-07-20 is a Monday -> "Mo 20.07."; title links to booking page
+    # uniform version goes into the title, which appears once for both showings
+    assert msg.count("<b>The Odyssey (OV)</b>") == 1
+    # one linked line per showing: hall · date, time; chronological order
+    monday = '• <a href="https://cineplexx.at/film/die-odyssee">Saal 6 · Mo 20.07., 19:00</a>'
+    tuesday = '• <a href="https://cineplexx.at/film/die-odyssee">Saal 3 · Di 21.07., 20:15</a>'
+    assert monday in msg and tuesday in msg
+    assert lines.index(monday) < lines.index(tuesday)
+    # no hall -> line starts with the date
     assert (
-        '• <a href="https://cineplexx.at/film/die-odyssee">The Odyssey</a> '
-        "(OV) — Mo 20.07., 19:00 · Saal 6" in msg
-    )
-    assert (
-        '• <a href="https://www.megaplex.at/ticket/57419/539128">Die Odyssee</a> '
-        "(OV - IMAX 2D) — Mo 20.07., 19:45" in msg
+        '• <a href="https://www.megaplex.at/ticket/57419/539128">Mo 20.07., 19:45</a>'
+        in msg
     )
     # no bare URLs on their own lines anymore
     assert not any(line.startswith("http") for line in lines)
+
+
+def test_format_message_puts_version_on_lines_when_versions_differ():
+    showings = [
+        make("Cineplexx Linz", "F1", 20, 19, 0, "OV", hall="Saal 6",
+             url="https://x/1"),
+        make("Cineplexx Linz", "F1", 22, 18, 30, "OmU", hall="Saal 1",
+             url="https://x/2"),
+    ]
+    msg = format_message(showings)
+    # clean title without version tag
+    assert "<b>F1</b>" in msg
+    assert '• <a href="https://x/1">Saal 6 · Mo 20.07., 19:00 · OV</a>' in msg
+    assert '• <a href="https://x/2">Saal 1 · Mi 22.07., 18:30 · OmU</a>' in msg
 
 
 def test_format_message_escapes_html():
@@ -42,7 +62,7 @@ def test_format_message_escapes_html():
              url="https://x.at/film?a=1&b=2"),
     ]
     msg = format_message(showings)
-    assert "Fast &amp; Furious &lt;Final&gt;" in msg
+    assert "<b>Fast &amp; Furious &lt;Final&gt; (OV)</b>" in msg
     assert 'href="https://x.at/film?a=1&amp;b=2"' in msg
     assert "Fast & Furious" not in msg
 

@@ -19,14 +19,27 @@ def format_message(showings: list[Showing]) -> str:
         by_cinema[s.cinema].append(s)
     for cinema in sorted(by_cinema):
         lines.append(f"<b>{escape(cinema)}</b>")
-        for s in sorted(by_cinema[cinema], key=lambda x: x.start):
-            weekday = _WEEKDAYS[s.start.weekday()]
-            hall = f" · {escape(s.hall)}" if s.hall else ""
-            lines.append(
-                f'• <a href="{escape(s.url, quote=True)}">{escape(s.movie)}</a> '
-                f"({escape(s.version)}) — "
-                f"{weekday} {s.start:%d.%m}., {s.start:%H:%M}{hall}"
-            )
+        by_movie: dict[str, list[Showing]] = defaultdict(list)
+        for s in by_cinema[cinema]:
+            by_movie[s.movie].append(s)
+        # movie blocks ordered by their earliest showing
+        for movie in sorted(by_movie, key=lambda m: min(x.start for x in by_movie[m])):
+            group = sorted(by_movie[movie], key=lambda x: x.start)
+            uniform_version = len({s.version for s in group}) == 1
+            title = escape(movie)
+            if uniform_version:
+                title += f" ({escape(group[0].version)})"
+            lines.append(f"<b>{title}</b>")
+            for s in group:
+                weekday = _WEEKDAYS[s.start.weekday()]
+                parts = []
+                if s.hall:
+                    parts.append(escape(s.hall))
+                parts.append(f"{weekday} {s.start:%d.%m}., {s.start:%H:%M}")
+                if not uniform_version:
+                    parts.append(escape(s.version))
+                label = " · ".join(parts)
+                lines.append(f'• <a href="{escape(s.url, quote=True)}">{label}</a>')
         lines.append("")
     return "\n".join(lines).strip()
 
