@@ -53,6 +53,6 @@ def test_empty_states_styled(tmp_path):
 def test_telegram_panel(tmp_path):
     write_payload(tmp_path, one_showing())
     html = create_app(tmp_path).test_client().get("/").data.decode()
-    assert 'class="telegram"' in html
+    assert 'class="sidebar"' in html
     assert "@ov_linz" in html
     assert 'href="https://t.me/ov_linz"' in html

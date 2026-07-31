@@ -114,32 +114,33 @@ _TEMPLATE = """<!doctype html>
   .layout{display:flex;gap:1.2rem;align-items:flex-start}
   .layout main{flex:1;min-width:0}
   .layout main h2:first-child{margin-top:.2rem}
-  .telegram{
+  .sidebar{flex:0 0 170px;position:sticky;top:1rem;
+   display:flex;flex-direction:column;gap:.8rem}
+  .sidebar .box{
    border:1px solid var(--edge);border-radius:8px;
    background:linear-gradient(180deg,#1a1410,#171109);
-   padding:1.2rem .9rem;
-   display:flex;flex-direction:column;align-items:center;gap:.6rem;
-   text-align:center;flex:0 0 170px;
-   position:sticky;top:1rem;
+   padding:.9rem .8rem;
+   display:flex;flex-direction:column;align-items:center;gap:.5rem;
+   text-align:center;
   }
-  .telegram .icon{display:inline-flex;align-items:center;width:28px;height:28px;flex:0 0 auto;
-   filter:drop-shadow(0 0 6px rgba(34,158,217,.4))}
-  .telegram .icon svg{width:28px;height:28px;display:block}
-  .telegram .text{color:var(--text);font-size:.95rem}
-  .telegram .text .sub{color:var(--dim);font-size:.8rem;display:block;margin-top:.1rem}
-  .telegram a{width:100%;text-align:center;color:#221a0c;background:var(--gold);
-   border-radius:4px;padding:.35rem .8rem;font-size:.8rem;font-weight:700;
-   letter-spacing:.1em;box-shadow:0 0 8px rgba(232,179,77,.35)}
-   .telegram a:hover{background:var(--gold-bright)}
-   .telegram a.cal{background:none;color:var(--dim);box-shadow:none;
-    font-weight:400;letter-spacing:0;padding:.1rem 0;font-size:.8rem}
-   .telegram a.cal:hover{background:none;color:var(--gold-bright)}
-   @media (max-width:560px){
-    .layout{flex-direction:column}
-    .telegram{flex-direction:row;flex-wrap:wrap;text-align:left;position:static;padding:.7rem 1rem}
-    .telegram a{margin-left:auto;width:auto}
-    .telegram a.cal{margin-left:0;width:100%}
-   }
+  .sidebar .box .icon{display:inline-flex;align-items:center;justify-content:center;
+   width:28px;height:28px;flex:0 0 auto;font-size:1.4rem}
+  .sidebar .box .icon svg{width:22px;height:22px;display:block}
+  .sidebar .box .icon.tg{filter:drop-shadow(0 0 6px rgba(34,158,217,.4))}
+  .sidebar .box .text{color:var(--text);font-size:.88rem}
+  .sidebar .box .text .sub{color:var(--dim);font-size:.72rem;display:block;margin-top:.1rem}
+  .sidebar .box a{width:100%;text-align:center;color:#221a0c;background:var(--gold);
+   border-radius:4px;padding:.35rem .7rem;font-size:.75rem;font-weight:700;
+   letter-spacing:.08em;box-shadow:0 0 8px rgba(232,179,77,.35)}
+  .sidebar .box a:hover{background:var(--gold-bright)}
+  @media (max-width:560px){
+   .layout{flex-direction:column}
+   .sidebar{position:static;flex-direction:column}
+   .sidebar .box{flex-direction:row;text-align:left;padding:.7rem .75rem;gap:.4rem}
+   .sidebar .box .icon{width:22px;height:22px;font-size:1.2rem}
+   .sidebar .box .text{font-size:.82rem;flex:1}
+   .sidebar .box a{width:auto;padding:.3rem .6rem;font-size:.7rem}
+  }
   .meta{color:var(--faint);font-size:.8rem;margin-top:2rem;text-align:center}
  .ok{color:var(--ok)}.err{color:var(--err)}
 </style>
@@ -152,17 +153,25 @@ _TEMPLATE = """<!doctype html>
  <div class="bulbs"></div>
 </header>
 <div class="layout">
-<div class="telegram">
-  <span class="icon"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<aside class="sidebar">
+<div class="box">
+  <span class="icon tg"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <circle cx="24" cy="24" r="24" fill="#229ED9"/>
     <path fill="#fff" d="M10.7 23.5l25-9.6c1.2-.4 2.2.3 1.8 2l-4.3 20c-.3 1.3-1 1.6-2 1l-6-4.4-2.9 2.8c-.3.3-.6.6-1.2.6l.4-6 10.6-9.6c.5-.4-.1-.6-.7-.2L17.2 22l-5.9-1.8c-1.3-.4-1.3-1.3.3-2z"/>
   </svg></span>
   <span class="text">Get notified about new OV showings on Telegram
     <span class="sub">Channel: @ov_linz — free, no spam, only new showings.</span>
   </span>
-   <a href="https://t.me/ov_linz" target="_blank" rel="noopener">JOIN</a>
-   <a class="cal" href="/showings.ics">📅 Subscribe to calendar</a>
+  <a href="https://t.me/ov_linz" target="_blank" rel="noopener">JOIN</a>
 </div>
+<div class="box">
+  <span class="icon">📅</span>
+  <span class="text">Add showings to your calendar
+    <span class="sub">Subscribe in Google, Apple or Outlook Calendar.</span>
+  </span>
+  <a href="/showings.ics">SUBSCRIBE</a>
+</div>
+</aside>
 <main>
 {% if cinemas is none %}
   <p class="empty">No data yet — the first check is running.</p>

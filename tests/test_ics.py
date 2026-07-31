@@ -106,6 +106,7 @@ def test_route_without_payload_returns_empty_calendar(tmp_path):
 def test_sidebar_has_subscribe_link(tmp_path):
     write_payload(tmp_path, [SHOWING])
     html = create_app(tmp_path).test_client().get("/").data.decode()
-    assert 'class="cal"' in html
+    assert 'class="sidebar"' in html
     assert 'href="/showings.ics"' in html
-    assert "Subscribe to calendar" in html
+    assert "SUBSCRIBE" in html
+    assert "Add showings to your calendar" in html
