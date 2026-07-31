@@ -21,7 +21,8 @@ _TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="900">
-<title>OV-Kino Linz</title>
+<title>OV Cinema Linz</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Limelight&display=swap" rel="stylesheet">
@@ -148,7 +149,7 @@ _TEMPLATE = """<!doctype html>
 <body>
 <header class="marquee">
  <div class="bulbs"></div>
- <h1>🎬 OV-Kino Linz</h1>
+ <h1>🎬 OV Cinema Linz</h1>
  <p class="tagline">Original Versions in Linz</p>
  <div class="bulbs"></div>
 </header>

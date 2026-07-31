@@ -27,7 +27,7 @@ def test_calendar_skeleton():
     assert body.startswith("BEGIN:VCALENDAR\r\n")
     assert body.endswith("END:VCALENDAR\r\n")
     assert "VERSION:2.0" in body
-    assert "X-WR-CALNAME:OV-Kino Linz" in body
+    assert "X-WR-CALNAME:OV Cinema Linz" in body
     assert "BEGIN:VEVENT" not in body
 
 

@@ -13,7 +13,7 @@ _CAL_HEADER = (
     "PRODID:-//ov-kino-linz//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:OV-Kino Linz",
+    "X-WR-CALNAME:OV Cinema Linz",
 )
 
 
