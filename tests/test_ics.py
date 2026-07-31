@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 
 from app.ics import render_ics
+from app.state import save_showings
+from app.web import create_app
 
 NOW = datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)
 
@@ -71,3 +73,31 @@ def test_malformed_start_is_skipped():
     bad = {**SHOWING, "start": "not-a-date"}
     body = render_ics([bad, SHOWING], now=NOW)
     assert body.count("BEGIN:VEVENT") == 1
+
+
+def write_payload(data_dir, showings):
+    save_showings(data_dir, {
+        "generated_at": "2026-07-31T12:00:00+02:00",
+        "sources": {"cineplexx": "ok"},
+        "showings": showings,
+    })
+
+
+def test_route_content_type_and_one_event_per_showing(tmp_path):
+    second = {**SHOWING, "movie": "Film B", "start": "2026-08-03T20:00:00+02:00"}
+    write_payload(tmp_path, [SHOWING, second])
+    resp = create_app(tmp_path).test_client().get("/showings.ics")
+    assert resp.status_code == 200
+    assert resp.content_type.startswith("text/calendar")
+    body = resp.data.decode()
+    assert body.count("BEGIN:VEVENT") == 2
+    assert "SUMMARY:The Odyssey (OV)" in body
+    assert "SUMMARY:Film B (OV)" in body
+
+
+def test_route_without_payload_returns_empty_calendar(tmp_path):
+    resp = create_app(tmp_path).test_client().get("/showings.ics")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "BEGIN:VCALENDAR" in body
+    assert "BEGIN:VEVENT" not in body

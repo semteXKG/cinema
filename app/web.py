@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 
-from flask import Flask, render_template_string
+from flask import Flask, Response, render_template_string
 
 from . import state as state_mod
+from . import ics as ics_mod
 
 _WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -256,6 +257,12 @@ def create_app(data_dir) -> Flask:
     @app.route("/healthz")
     def healthz():
         return "ok", 200
+
+    @app.route("/showings.ics")
+    def showings_ics():
+        payload = state_mod.load_showings(data_dir) or {}
+        body = ics_mod.render_ics(payload.get("showings", []))
+        return Response(body, mimetype="text/calendar")
 
     @app.route("/")
     def index():

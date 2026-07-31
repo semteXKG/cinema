@@ -10,6 +10,7 @@ of upcoming showings. Python/Flask, no DB — state lives in JSON files under `D
 - `app/checker.py` — dedup/pruning + check orchestration (`Config`, `run_check`)
 - `app/notify.py` — Telegram alerts (`send_telegram`)
 - `app/web.py` — read-only web UI (`create_app(data_dir)`)
+- `app/ics.py` — ICS calendar feed renderer (`render_ics`), served at `/showings.ics`
 - `app/state.py` — `save_showings`/`load_showings` JSON persistence
 - `app/main.py` — entrypoint: scheduler loop + web server (env: `DATA_DIR`, `PORT`,
   `CHECK_INTERVAL_HOURS`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SOURCES`)
