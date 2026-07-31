@@ -130,12 +130,16 @@ _TEMPLATE = """<!doctype html>
   .telegram a{width:100%;text-align:center;color:#221a0c;background:var(--gold);
    border-radius:4px;padding:.35rem .8rem;font-size:.8rem;font-weight:700;
    letter-spacing:.1em;box-shadow:0 0 8px rgba(232,179,77,.35)}
-  .telegram a:hover{background:var(--gold-bright)}
-  @media (max-width:560px){
-   .layout{flex-direction:column}
-   .telegram{flex-direction:row;text-align:left;position:static;padding:.7rem 1rem}
-   .telegram a{margin-left:auto;width:auto}
-  }
+   .telegram a:hover{background:var(--gold-bright)}
+   .telegram a.cal{background:none;color:var(--dim);box-shadow:none;
+    font-weight:400;letter-spacing:0;padding:.1rem 0;font-size:.8rem}
+   .telegram a.cal:hover{background:none;color:var(--gold-bright)}
+   @media (max-width:560px){
+    .layout{flex-direction:column}
+    .telegram{flex-direction:row;flex-wrap:wrap;text-align:left;position:static;padding:.7rem 1rem}
+    .telegram a{margin-left:auto;width:auto}
+    .telegram a.cal{margin-left:0;width:100%}
+   }
   .meta{color:var(--faint);font-size:.8rem;margin-top:2rem;text-align:center}
  .ok{color:var(--ok)}.err{color:var(--err)}
 </style>
@@ -156,7 +160,8 @@ _TEMPLATE = """<!doctype html>
   <span class="text">Get notified about new OV showings on Telegram
     <span class="sub">Channel: @ov_linz — free, no spam, only new showings.</span>
   </span>
-  <a href="https://t.me/ov_linz" target="_blank" rel="noopener">JOIN</a>
+   <a href="https://t.me/ov_linz" target="_blank" rel="noopener">JOIN</a>
+   <a class="cal" href="/showings.ics">📅 Subscribe to calendar</a>
 </div>
 <main>
 {% if cinemas is none %}
