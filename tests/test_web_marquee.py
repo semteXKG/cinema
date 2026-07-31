@@ -29,7 +29,7 @@ def test_marquee_header_and_font(tmp_path):
     write_payload(tmp_path, one_showing())
     html = create_app(tmp_path).test_client().get("/").data.decode()
     assert 'class="marquee"' in html
-    assert "Originalversionen in Linz" in html
+    assert "Original Versions in Linz" in html
     assert html.count('class="bulbs"') == 2
     assert "family=Limelight" in html  # Google Fonts display face
 
@@ -44,10 +44,10 @@ def test_marquee_styling_hooks(tmp_path):
 
 def test_empty_states_styled(tmp_path):
     html = create_app(tmp_path).test_client().get("/").data.decode()
-    assert '<p class="empty">Noch keine Daten' in html
+    assert '<p class="empty">No data yet' in html
     write_payload(tmp_path, [])
     html = create_app(tmp_path).test_client().get("/").data.decode()
-    assert '<p class="empty">Aktuell keine OV-Vorstellungen' in html
+    assert '<p class="empty">No OV showings found' in html
 
 
 def test_telegram_panel(tmp_path):

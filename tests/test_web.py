@@ -41,10 +41,10 @@ def test_index_groups_by_cinema_and_movie(tmp_path):
     # one card per movie: title appears exactly once for two showings
     assert html.count("The Odyssey") == 1
     # both showings present as rows with their own dates
-    assert "Mo 20.07." in html and "Di 21.07." in html
+    assert "Mon 20.07." in html and "Tue 21.07." in html
     assert "19:00" in html and "20:00" in html
     # day-group headings are gone
-    assert "Mo 20.07.2026" not in html
+    assert "Mon 20.07.2026" not in html
     # ticket link and source health still rendered
     assert "https://www.megaplex.at/ticket/1" in html
     assert 'class="err"' in html
@@ -125,4 +125,4 @@ def test_movies_ordered_by_earliest_showing(tmp_path):
 def test_index_without_data(tmp_path):
     client = create_app(tmp_path).test_client()
     html = client.get("/").data.decode()
-    assert "Noch keine Daten" in html
+    assert "No data yet" in html

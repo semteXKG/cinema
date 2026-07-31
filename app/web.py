@@ -9,13 +9,13 @@ from flask import Flask, render_template_string
 
 from . import state as state_mod
 
-_WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 # Cinemas listed here render first, in this order; the rest alphabetically.
 _CINEMA_ORDER = ("Megaplex PlusCity",)
 
 _TEMPLATE = """<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -133,7 +133,7 @@ _TEMPLATE = """<!doctype html>
 <header class="marquee">
  <div class="bulbs"></div>
  <h1>🎬 OV-Kino Linz</h1>
- <p class="tagline">Originalversionen in Linz</p>
+ <p class="tagline">Original Versions in Linz</p>
  <div class="bulbs"></div>
 </header>
 <div class="telegram">
@@ -141,15 +141,15 @@ _TEMPLATE = """<!doctype html>
     <circle cx="24" cy="24" r="24" fill="#229ED9"/>
     <path fill="#fff" d="M10.7 23.5l25-9.6c1.2-.4 2.2.3 1.8 2l-4.3 20c-.3 1.3-1 1.6-2 1l-6-4.4-2.9 2.8c-.3.3-.6.6-1.2.6l.4-6 10.6-9.6c.5-.4-.1-.6-.7-.2L17.2 22l-5.9-1.8c-1.3-.4-1.3-1.3.3-2z"/>
   </svg></span>
-  <span class="text">Lass dich per Telegram über neue OV-Vorstellungen benachrichtigen
-    <span class="sub">Canal: @ov_linz — kostenlos, kein Spam, nur neue Vorstellungen.</span>
+  <span class="text">Get notified about new OV showings on Telegram
+    <span class="sub">Channel: @ov_linz — free, no spam, only new showings.</span>
   </span>
   <a href="https://t.me/ov_linz" target="_blank" rel="noopener">JOIN</a>
 </div>
 {% if cinemas is none %}
-  <p class="empty">Noch keine Daten — der erste Check läuft gerade.</p>
+  <p class="empty">No data yet — the first check is running.</p>
 {% elif not cinemas %}
-  <p class="empty">Aktuell keine OV-Vorstellungen gefunden.</p>
+  <p class="empty">No OV showings found right now.</p>
 {% else %}
   {% for c in cinemas %}
   <h2>{{ c.name }}</h2>
@@ -164,7 +164,7 @@ _TEMPLATE = """<!doctype html>
   {% endfor %}
 {% endif %}
 <p class="meta">
-  Zuletzt geprüft: {{ generated_at }} ·
+  Last checked: {{ generated_at }} ·
   Cineplexx: <span class="{{ 'ok' if sources.get('cineplexx') == 'ok' else 'err' }}">{{ sources.get('cineplexx', '–') }}</span> ·
   Megaplex: <span class="{{ 'ok' if sources.get('megaplex') == 'ok' else 'err' }}">{{ sources.get('megaplex', '–') }}</span>
 </p>
