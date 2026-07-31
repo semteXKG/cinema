@@ -105,12 +105,27 @@ _TEMPLATE = """<!doctype html>
   font-variant-numeric:tabular-nums;letter-spacing:.04em;
  }
  a.showing .detail{color:var(--dim);font-size:.85rem}
- .empty{
-  text-align:center;color:var(--dim);
-  border:1px dashed var(--edge);border-radius:8px;
-  padding:2rem 1rem;margin:1.5rem 0;
- }
- .meta{color:var(--faint);font-size:.8rem;margin-top:2rem;text-align:center}
+.empty{
+   text-align:center;color:var(--dim);
+   border:1px dashed var(--edge);border-radius:8px;
+   padding:2rem 1rem;margin:1.5rem 0;
+  }
+  .telegram{
+   border:1px solid var(--edge);border-radius:8px;
+   background:linear-gradient(180deg,#1a1410,#171109);
+   padding:.7rem 1rem;margin:0 0 1.4rem;
+   display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;
+  }
+  .telegram .icon{display:inline-flex;align-items:center;width:28px;height:28px;flex:0 0 auto;
+   filter:drop-shadow(0 0 6px rgba(34,158,217,.4))}
+  .telegram .icon svg{width:28px;height:28px;display:block}
+  .telegram .text{color:var(--text);font-size:.95rem}
+  .telegram .text .sub{color:var(--dim);font-size:.8rem;display:block;margin-top:.1rem}
+  .telegram a{margin-left:auto;color:#221a0c;background:var(--gold);
+   border-radius:4px;padding:.35rem .8rem;font-size:.8rem;font-weight:700;
+   letter-spacing:.1em;box-shadow:0 0 8px rgba(232,179,77,.35)}
+  .telegram a:hover{background:var(--gold-bright)}
+  .meta{color:var(--faint);font-size:.8rem;margin-top:2rem;text-align:center}
  .ok{color:var(--ok)}.err{color:var(--err)}
 </style>
 </head>
@@ -121,6 +136,16 @@ _TEMPLATE = """<!doctype html>
  <p class="tagline">Originalversionen in Linz</p>
  <div class="bulbs"></div>
 </header>
+<div class="telegram">
+  <span class="icon"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <circle cx="24" cy="24" r="24" fill="#229ED9"/>
+    <path fill="#fff" d="M10.7 23.5l25-9.6c1.2-.4 2.2.3 1.8 2l-4.3 20c-.3 1.3-1 1.6-2 1l-6-4.4-2.9 2.8c-.3.3-.6.6-1.2.6l.4-6 10.6-9.6c.5-.4-.1-.6-.7-.2L17.2 22l-5.9-1.8c-1.3-.4-1.3-1.3.3-2z"/>
+  </svg></span>
+  <span class="text">Lass dich per Telegram über neue OV-Vorstellungen benachrichtigen
+    <span class="sub">Canal: @ov_linz — kostenlos, kein Spam, nur neue Vorstellungen.</span>
+  </span>
+  <a href="https://t.me/ov_linz" target="_blank" rel="noopener">JOIN</a>
+</div>
 {% if cinemas is none %}
   <p class="empty">Noch keine Daten — der erste Check läuft gerade.</p>
 {% elif not cinemas %}
