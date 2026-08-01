@@ -6,12 +6,12 @@ of upcoming showings. Python/Flask, no DB — state lives in JSON files under `D
 
 ## Layout
 
-- `app/fetchers.py` — cinema program fetchers (cineplexx, megaplex)
-- `app/checker.py` — dedup/pruning + check orchestration (`Config`, `run_check`)
+- `app/fetchers.py` — cinema program fetchers (cineplexx, megaplex); each returns `(showings, movie_metas)`
+- `app/checker.py` — dedup/pruning + check orchestration (`Config`, `run_check`); caches poster images under `DATA_DIR/posters/`
 - `app/notify.py` — Telegram alerts (`send_telegram`)
-- `app/web.py` — read-only web UI (`create_app(data_dir)`)
+- `app/web.py` — read-only web UI (`create_app(data_dir)`); serves cached posters at `/posters/<name>`
 - `app/ics.py` — ICS calendar feed renderer (`render_ics`), served at `/showings.ics`
-- `app/state.py` — `save_showings`/`load_showings` JSON persistence
+- `app/state.py` — `save_showings`/`load_showings` JSON persistence; `showings.json` carries a `"movies"` map (`"Cinema|Title"` → runtime/genres/poster) alongside the flat `"showings"` list.
 - `app/main.py` — entrypoint: scheduler loop + web server (env: `DATA_DIR`, `PORT`,
   `CHECK_INTERVAL_HOURS`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SOURCES`)
 

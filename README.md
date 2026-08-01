@@ -5,6 +5,11 @@ Cineplexx Linz und Hollywood Megaplex PlusCity, postet Telegram-Alerts
 im öffentlichen Kanal [@ov_linz](https://t.me/ov_linz) und zeigt alle
 kommenden OV-Vorstellungen auf einer Webseite.
 
+Laufzeit, Genre und Filmplakat werden direkt von den Kinoseiten gelesen und auf
+der Webseite, in den Telegram-Alerts und im Kalender-Feed (`/showings.ics`)
+angezeigt. Plakate werden lokal unter `DATA_DIR/posters/` zwischengespeichert,
+statt bei jedem Seitenaufruf das Kino-CDN zu laden.
+
 ## Lokal laufen lassen
 
 ```bash
