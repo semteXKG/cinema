@@ -132,7 +132,7 @@ def run_check(
         notifier(
             config.telegram_token,
             config.telegram_chat_id,
-            notify.format_message(new),
+            notify.format_message(new, movies=movie_dicts),
         )
     for s in upcoming:
         state["seen"].setdefault(s.key, now.isoformat())

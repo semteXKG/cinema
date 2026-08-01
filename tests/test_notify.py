@@ -129,3 +129,57 @@ def test_send_telegram_hard_wraps_single_overlong_line():
     assert len(chunks) == 2
     assert all(len(c) <= 4096 for c in chunks)
     assert "".join(chunks) == text
+
+
+def test_format_message_appends_genre_and_runtime():
+    showings = [
+        make("Cineplexx Linz", "The Odyssey", 20, 19, 0, "OV", hall="Saal 6")
+    ]
+    movies = {
+        "Cineplexx Linz|The Odyssey": {
+            "runtime_min": 180,
+            "genres": ["Abenteuer", "Historie"],
+            "poster": None,
+            "poster_file": None,
+        }
+    }
+    msg = format_message(showings, movies=movies)
+    assert "<b>The Odyssey (OV)</b> — Abenteuer, Historie, 180 Min" in msg
+
+
+def test_format_message_meta_suffix_without_uniform_version():
+    showings = [
+        make("Cineplexx Linz", "F1", 20, 19, 0, "OV", hall="Saal 6", url="https://x/1"),
+        make("Cineplexx Linz", "F1", 22, 18, 30, "OmU", hall="Saal 1", url="https://x/2"),
+    ]
+    movies = {
+        "Cineplexx Linz|F1": {
+            "runtime_min": 100,
+            "genres": ["Drama"],
+            "poster": None,
+            "poster_file": None,
+        }
+    }
+    msg = format_message(showings, movies=movies)
+    assert "<b>F1</b> — Drama, 100 Min" in msg
+
+
+def test_format_message_without_movies_is_unchanged():
+    showings = [
+        make("Cineplexx Linz", "The Odyssey", 20, 19, 0, "OV", hall="Saal 6")
+    ]
+    assert format_message(showings) == format_message(showings, movies={})
+
+
+def test_format_message_escapes_meta():
+    showings = [make("Cineplexx Linz", "X", 20, 19, 0, "OV")]
+    movies = {
+        "Cineplexx Linz|X": {
+            "runtime_min": None,
+            "genres": ["Dra<ma> & Co"],
+            "poster": None,
+            "poster_file": None,
+        }
+    }
+    msg = format_message(showings, movies=movies)
+    assert "Dra&lt;ma&gt; &amp; Co" in msg

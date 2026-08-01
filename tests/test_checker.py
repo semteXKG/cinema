@@ -190,3 +190,14 @@ def test_prune_removes_unreferenced_posters(tmp_path):
     names = {f.name for f in posters.iterdir()}
     assert "stale.jpg" not in names
     assert len(names) == 1
+
+
+def test_new_showings_message_includes_meta(tmp_path):
+    sent = []
+    metas = {"Cineplexx Linz|The Odyssey": MovieMeta(180, ("Abenteuer",), None)}
+    fetchers = {"cineplexx": FakeFetcher([make_showing()], metas=metas)}
+    cfg = Config(telegram_token="T", telegram_chat_id="C", sources=("cineplexx",))
+    run_check(None, tmp_path, cfg, NOW,
+              notifier=lambda t, c, text: sent.append(text),
+              fetcher_map=fetchers)
+    assert "Abenteuer, 180 Min" in sent[0]

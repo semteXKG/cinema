@@ -12,7 +12,8 @@ from .models import Showing
 _WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 
-def format_message(showings: list[Showing]) -> str:
+def format_message(showings: list[Showing], movies: dict | None = None) -> str:
+    movies = movies or {}
     lines = ["🎬 <b>Neue OV-Vorstellungen in Linz</b>", ""]
     by_cinema: dict[str, list[Showing]] = defaultdict(list)
     for s in showings:
@@ -29,7 +30,14 @@ def format_message(showings: list[Showing]) -> str:
             title = escape(movie)
             if uniform_version:
                 title += f" ({escape(group[0].version)})"
-            lines.append(f"<b>{title}</b>")
+            meta = movies.get(f"{cinema}|{movie}") or {}
+            meta_suffix = ""
+            meta_parts = [escape(g) for g in meta.get("genres") or []]
+            if meta.get("runtime_min"):
+                meta_parts.append(f"{meta['runtime_min']} Min")
+            if meta_parts:
+                meta_suffix = " — " + ", ".join(meta_parts)
+            lines.append(f"<b>{title}</b>{meta_suffix}")
             for s in group:
                 weekday = _WEEKDAYS[s.start.weekday()]
                 parts = []
