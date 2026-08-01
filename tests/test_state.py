@@ -2,10 +2,11 @@ import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.models import Showing
+from app.models import MovieMeta, Showing
 from app.state import (
     load_showings,
     load_state,
+    movie_meta_to_dict,
     prune_state,
     save_showings,
     save_state,
@@ -68,3 +69,26 @@ def test_prune_state_drops_past_keys():
     prune_state(state, NOW)
     assert old not in state["seen"]
     assert future in state["seen"]
+
+
+def test_movie_meta_to_dict():
+    d = movie_meta_to_dict(
+        MovieMeta(180, ("Drama", "Action"), "https://x/p.jpg"), "abc123.jpg"
+    )
+    assert d == {
+        "runtime_min": 180,
+        "genres": ["Drama", "Action"],
+        "poster": "https://x/p.jpg",
+        "poster_file": "abc123.jpg",
+    }
+    assert json.dumps(d)  # serializable
+
+
+def test_movie_meta_to_dict_defaults():
+    d = movie_meta_to_dict(MovieMeta())
+    assert d == {
+        "runtime_min": None,
+        "genres": [],
+        "poster": None,
+        "poster_file": None,
+    }

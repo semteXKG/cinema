@@ -2,6 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.models import (
+    MovieMeta,
     Showing,
     cineplexx_session_version,
     is_english_ov_label,
@@ -63,3 +64,20 @@ def test_megaplex_version():
     assert megaplex_version("  OV - Dolby Vision 2D  ") == "OV - Dolby Vision 2D"
     assert megaplex_version("Dolby Atmos 2D") is None
     assert megaplex_version("4DX 2D") is None
+
+
+def test_movie_meta_defaults():
+    m = MovieMeta()
+    assert m.runtime_min is None
+    assert m.genres == ()
+    assert m.poster is None
+
+
+def test_movie_meta_is_frozen():
+    import dataclasses
+
+    import pytest
+
+    m = MovieMeta(180, ("Drama",), "https://x/p.jpg")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        m.runtime_min = 90  # type: ignore[misc]

@@ -51,3 +51,12 @@ def megaplex_version(label: str) -> str | None:
     """Megaplex tags original-language showings with a leading 'OV'."""
     label = " ".join(label.split())
     return label if label.startswith("OV") else None
+
+
+@dataclass(frozen=True)
+class MovieMeta:
+    """Per-movie metadata, keyed 'Cinema|Title' in the showings.json movies map."""
+
+    runtime_min: int | None = None
+    genres: tuple[str, ...] = ()
+    poster: str | None = None  # remote URL, for cache (re)download

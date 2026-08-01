@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .models import Showing
+from .models import MovieMeta, Showing
 
 _PRUNE_GRACE = timedelta(hours=6)
 
@@ -56,6 +56,15 @@ def showing_to_dict(s: Showing) -> dict:
         "version": s.version,
         "hall": s.hall,
         "url": s.url,
+    }
+
+
+def movie_meta_to_dict(m: MovieMeta, poster_file: str | None = None) -> dict:
+    return {
+        "runtime_min": m.runtime_min,
+        "genres": list(m.genres),
+        "poster": m.poster,
+        "poster_file": poster_file,
     }
 
 
