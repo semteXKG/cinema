@@ -5,6 +5,7 @@ import pytest
 
 from tests.conftest import load_fixture
 from app.fetchers import (
+    HttpClient,
     SourceError,
     fetch_cineplexx,
     fetch_megaplex,
@@ -91,3 +92,15 @@ def test_fetch_megaplex_broken_page_is_source_error():
     http.text_routes["/kinoprogramm/linz/"] = "<html><body>404</body></html>"
     with pytest.raises(SourceError):
         fetch_megaplex(http, TODAY)
+
+
+def test_http_client_get_bytes(monkeypatch):
+    class Resp:
+        content = b"\xff\xd8img"
+
+        def raise_for_status(self):
+            pass
+
+    client = HttpClient()
+    monkeypatch.setattr(client._session, "get", lambda *a, **k: Resp())
+    assert client.get_bytes("https://cdn.example/p.jpg") == b"\xff\xd8img"

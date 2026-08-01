@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -112,3 +113,80 @@ def test_showings_json_contains_movies_filtered_to_shown(tmp_path):
         "poster": "https://x/p.jpg",
         "poster_file": None,  # filled by the poster cache (Task 3)
     }
+
+
+class FakePosterHttp:
+    """Serves poster bytes; content=None simulates a download failure."""
+
+    def __init__(self, content=b"\xff\xd8img"):
+        self.content = content
+        self.requested = []
+
+    def get_bytes(self, url, headers=None):
+        self.requested.append(url)
+        if self.content is None:
+            raise RuntimeError("download failed")
+        return self.content
+
+
+def make_meta(poster="https://cdn.example/poster.jpg"):
+    return MovieMeta(180, ("Abenteuer", "Historie"), poster)
+
+
+def test_posters_downloaded_and_referenced(tmp_path):
+    http = FakePosterHttp()
+    metas = {
+        "Cineplexx Linz|The Odyssey": make_meta(),
+        # filtered out (no such showing) -> must not trigger a download
+        "Cineplexx Linz|Not Shown": make_meta("https://cdn.example/other.png"),
+    }
+    fetchers = {"cineplexx": FakeFetcher([make_showing()], metas=metas)}
+    cfg = Config(telegram_token=None, telegram_chat_id=None, sources=("cineplexx",))
+    run_check(http, tmp_path, cfg, NOW, fetcher_map=fetchers)
+    assert http.requested == ["https://cdn.example/poster.jpg"]
+    files = list((tmp_path / "posters").iterdir())
+    assert len(files) == 1
+    assert files[0].read_bytes() == b"\xff\xd8img"
+    entry = load_showings(tmp_path)["movies"]["Cineplexx Linz|The Odyssey"]
+    assert entry["poster_file"] == files[0].name
+    # stable content-derived name: sha1(url)[:16] + ext
+    assert files[0].name == (
+        hashlib.sha1(b"https://cdn.example/poster.jpg").hexdigest()[:16] + ".jpg"
+    )
+
+
+def test_poster_cache_hit_skips_download(tmp_path):
+    metas = {"Cineplexx Linz|The Odyssey": make_meta()}
+    fetchers = {"cineplexx": FakeFetcher([make_showing()], metas=metas)}
+    cfg = Config(telegram_token=None, telegram_chat_id=None, sources=("cineplexx",))
+    run_check(FakePosterHttp(), tmp_path, cfg, NOW, fetcher_map=fetchers)
+    # second run with a fresh http: file exists -> no download
+    http2 = FakePosterHttp()
+    run_check(http2, tmp_path, cfg, NOW, fetcher_map=fetchers)
+    assert http2.requested == []
+    entry = load_showings(tmp_path)["movies"]["Cineplexx Linz|The Odyssey"]
+    assert entry["poster_file"] is not None
+
+
+def test_poster_download_failure_is_best_effort(tmp_path):
+    http = FakePosterHttp(content=None)
+    metas = {"Cineplexx Linz|The Odyssey": make_meta()}
+    fetchers = {"cineplexx": FakeFetcher([make_showing()], metas=metas)}
+    cfg = Config(telegram_token=None, telegram_chat_id=None, sources=("cineplexx",))
+    run_check(http, tmp_path, cfg, NOW, fetcher_map=fetchers)  # must not raise
+    entry = load_showings(tmp_path)["movies"]["Cineplexx Linz|The Odyssey"]
+    assert entry["poster_file"] is None
+    assert not list((tmp_path / "posters").iterdir())
+
+
+def test_prune_removes_unreferenced_posters(tmp_path):
+    posters = tmp_path / "posters"
+    posters.mkdir()
+    (posters / "stale.jpg").write_bytes(b"old")
+    metas = {"Cineplexx Linz|The Odyssey": make_meta()}
+    fetchers = {"cineplexx": FakeFetcher([make_showing()], metas=metas)}
+    cfg = Config(telegram_token=None, telegram_chat_id=None, sources=("cineplexx",))
+    run_check(FakePosterHttp(), tmp_path, cfg, NOW, fetcher_map=fetchers)
+    names = {f.name for f in posters.iterdir()}
+    assert "stale.jpg" not in names
+    assert len(names) == 1

@@ -54,6 +54,9 @@ class HttpClient:
     def get_text(self, url, headers=None):
         return self._get(url, headers=headers, params=None).text
 
+    def get_bytes(self, url, headers=None) -> bytes:
+        return self._get(url, headers=headers, params=None).content
+
     def _get(self, url, headers, params):
         try:
             resp = self._session.get(
