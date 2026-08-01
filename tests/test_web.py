@@ -7,12 +7,15 @@ from app.web import create_app
 TZ = ZoneInfo("Europe/Vienna")
 
 
-def write_payload(data_dir, showings):
-    save_showings(data_dir, {
+def write_payload(data_dir, showings, movies=None):
+    payload = {
         "generated_at": datetime(2026, 7, 18, 12, 0, tzinfo=TZ).isoformat(),
         "sources": {"cineplexx": "ok", "megaplex": "error"},
         "showings": showings,
-    })
+    }
+    if movies is not None:
+        payload["movies"] = movies
+    save_showings(data_dir, payload)
 
 
 def test_healthz(tmp_path):
@@ -126,3 +129,56 @@ def test_index_without_data(tmp_path):
     client = create_app(tmp_path).test_client()
     html = client.get("/").data.decode()
     assert "No data yet" in html
+
+
+ODYSSEY_SHOWING = {
+    "cinema": "Cineplexx Linz", "movie": "The Odyssey",
+    "start": "2026-07-20T19:00:00+02:00", "version": "OV",
+    "hall": "Saal 7", "url": "https://cineplexx.at/film/die-odyssee",
+}
+
+ODYSSEY_META = {
+    "runtime_min": 180, "genres": ["Abenteuer", "Historie"],
+    "poster": "https://x/p.jpg", "poster_file": "abc123.jpg",
+}
+
+
+def test_card_shows_poster_and_meta_line(tmp_path):
+    write_payload(tmp_path, [ODYSSEY_SHOWING],
+                  movies={"Cineplexx Linz|The Odyssey": ODYSSEY_META})
+    html = create_app(tmp_path).test_client().get("/").data.decode()
+    assert '<img src="/posters/abc123.jpg"' in html
+    assert 'loading="lazy"' in html
+    assert "Abenteuer, Historie · 180 Min" in html
+
+
+def test_card_meta_line_runtime_only(tmp_path):
+    meta = {**ODYSSEY_META, "genres": [], "poster_file": None}
+    write_payload(tmp_path, [ODYSSEY_SHOWING],
+                  movies={"Cineplexx Linz|The Odyssey": meta})
+    html = create_app(tmp_path).test_client().get("/").data.decode()
+    assert "180 Min" in html
+    assert "· 180 Min" not in html  # no dangling separator without genres
+    assert "<img" not in html  # no poster_file -> no image, no remote hotlink
+
+
+def test_card_without_movies_section_renders_as_before(tmp_path):
+    write_payload(tmp_path, [ODYSSEY_SHOWING])
+    html = create_app(tmp_path).test_client().get("/").data.decode()
+    assert "The Odyssey" in html
+    assert "<img" not in html
+    assert "Min" not in html
+
+
+def test_poster_route_serves_cached_file(tmp_path):
+    (tmp_path / "posters").mkdir()
+    (tmp_path / "posters" / "abc123.jpg").write_bytes(b"\xff\xd8")
+    resp = create_app(tmp_path).test_client().get("/posters/abc123.jpg")
+    assert resp.status_code == 200
+    assert resp.data == b"\xff\xd8"
+    assert "max-age=86400" in resp.headers["Cache-Control"]
+
+
+def test_poster_route_404_for_missing_file(tmp_path):
+    resp = create_app(tmp_path).test_client().get("/posters/nope.jpg")
+    assert resp.status_code == 404

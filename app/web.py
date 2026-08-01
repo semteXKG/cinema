@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
-from flask import Flask, Response, render_template_string
+from flask import Flask, Response, render_template_string, send_from_directory
 
 from . import state as state_mod
 from . import ics as ics_mod
@@ -79,10 +80,14 @@ _TEMPLATE = """<!doctype html>
   background-image:radial-gradient(circle at 50% 50%,var(--bg) 1.7px,transparent 2.4px);
   background-size:10px 14px;
  }
- .card strong{
-  font-family:'Limelight',system-ui,sans-serif;font-weight:400;
-  font-size:1.15rem;letter-spacing:.06em;
- }
+  .card strong{
+   font-family:'Limelight',system-ui,sans-serif;font-weight:400;
+   font-size:1.15rem;letter-spacing:.06em;
+  }
+  .filmrow{display:flex;gap:.8rem;align-items:flex-start}
+  .filmrow img{width:58px;border-radius:4px;border:1px solid var(--edge);flex:0 0 auto}
+  .filmtitle{min-width:0}
+  .filmmeta{color:var(--dim);font-size:.8rem;margin-top:.15rem}
  .badge{
   display:inline-block;background:var(--gold);color:#221a0c;border-radius:3px;
   padding:.05rem .45rem;font-size:.7rem;font-weight:700;letter-spacing:.12em;
@@ -183,7 +188,13 @@ _TEMPLATE = """<!doctype html>
   <h2>{{ c.name }}</h2>
     {% for m in c.movies %}
     <div class="card">
-      <strong>{{ m.movie }}</strong>{% if m.badge %}<span class="badge">{{ m.badge }}</span>{% endif %}
+      <div class="filmrow">
+        {% if m.poster %}<img src="/posters/{{ m.poster }}" alt="" loading="lazy">{% endif %}
+        <div class="filmtitle">
+          <strong>{{ m.movie }}</strong>{% if m.badge %}<span class="badge">{{ m.badge }}</span>{% endif %}
+          {% if m.meta_line %}<div class="filmmeta">{{ m.meta_line }}</div>{% endif %}
+        </div>
+      </div>
       {% for s in m.showings %}
       <a class="showing" href="{{ s.url }}"><span class="when">{{ s.date }} · {{ s.time }}</span>{% if s.detail %}<span class="detail">{{ s.detail }}</span>{% endif %}</a>
       {% endfor %}
@@ -218,8 +229,19 @@ def _cinema_key(name: str) -> tuple:
     return (preferred, name)
 
 
-def _group_showings(showings: list[dict]) -> list[dict]:
+def _meta_line(meta: dict) -> str:
+    parts = []
+    genres = [g for g in meta.get("genres") or [] if isinstance(g, str)]
+    if genres:
+        parts.append(", ".join(genres))
+    if meta.get("runtime_min"):
+        parts.append(f"{meta['runtime_min']} Min")
+    return " · ".join(parts)
+
+
+def _group_showings(showings: list[dict], movies: dict | None = None) -> list[dict]:
     """Group flat showing dicts into cinema -> movie -> showing rows."""
+    metas = movies or {}
     parsed = sorted(
         ((datetime.fromisoformat(s["start"]), s) for s in showings),
         key=lambda x: x[0],
@@ -230,8 +252,9 @@ def _group_showings(showings: list[dict]) -> list[dict]:
 
     cinemas = []
     for cinema in sorted(by_cinema, key=_cinema_key):
-        movies = []
+        movie_cards = []
         for movie, entries in by_cinema[cinema].items():
+            meta = metas.get(f"{cinema}|{movie}") or {}
             bases = {s["version"].split(" - ")[0].strip() for _, s in entries}
             badge = next(iter(bases)) if len(bases) == 1 else None
             rows = []
@@ -252,9 +275,20 @@ def _group_showings(showings: list[dict]) -> list[dict]:
                         "url": s["url"],
                     }
                 )
-            movies.append((entries[0][0], {"movie": movie, "badge": badge, "showings": rows}))
-        movies.sort(key=lambda t: t[0])
-        cinemas.append({"name": cinema, "movies": [m for _, m in movies]})
+            movie_cards.append(
+                (
+                    entries[0][0],
+                    {
+                        "movie": movie,
+                        "badge": badge,
+                        "showings": rows,
+                        "poster": meta.get("poster_file"),
+                        "meta_line": _meta_line(meta),
+                    },
+                )
+            )
+        movie_cards.sort(key=lambda t: t[0])
+        cinemas.append({"name": cinema, "movies": [m for _, m in movie_cards]})
     return cinemas
 
 
@@ -279,6 +313,10 @@ def create_app(data_dir) -> Flask:
         body = ics_mod.render_ics(payload.get("showings", []))
         return Response(body, mimetype="text/calendar")
 
+    @app.route("/posters/<name>")
+    def poster(name):
+        return send_from_directory(Path(data_dir) / "posters", name, max_age=86400)
+
     @app.route("/")
     def index():
         payload = state_mod.load_showings(data_dir)
@@ -288,7 +326,7 @@ def create_app(data_dir) -> Flask:
         if payload:
             generated_at = _format_generated_at(payload.get("generated_at", "–"))
             sources = payload.get("sources") or {}
-            cinemas = _group_showings(payload.get("showings", []))
+            cinemas = _group_showings(payload.get("showings", []), payload.get("movies"))
         return render_template_string(
             _TEMPLATE, cinemas=cinemas, generated_at=generated_at, sources=sources
         )
