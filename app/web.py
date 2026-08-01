@@ -310,7 +310,9 @@ def create_app(data_dir) -> Flask:
     @app.route("/showings.ics")
     def showings_ics():
         payload = state_mod.load_showings(data_dir) or {}
-        body = ics_mod.render_ics(payload.get("showings", []))
+        body = ics_mod.render_ics(
+            payload.get("showings", []), movies=payload.get("movies")
+        )
         return Response(body, mimetype="text/calendar")
 
     @app.route("/posters/<name>")

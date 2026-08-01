@@ -50,7 +50,7 @@ def _uid(s: dict) -> str:
     return hashlib.sha1(key.encode("utf-8")).hexdigest() + "@ov-kino-linz"
 
 
-def _event(s: dict, stamp: str) -> list[str]:
+def _event(s: dict, stamp: str, duration: timedelta) -> list[str]:
     start = datetime.fromisoformat(s["start"])
     summary = f"{s['movie']} ({s['version']})"
     location = s["cinema"] + (f", {s['hall']}" if s.get("hall") else "")
@@ -63,7 +63,7 @@ def _event(s: dict, stamp: str) -> list[str]:
         f"UID:{_uid(s)}",
         f"DTSTAMP:{stamp}",
         f"DTSTART:{_fmt_utc(start)}",
-        f"DTEND:{_fmt_utc(start + _EVENT_DURATION)}",
+        f"DTEND:{_fmt_utc(start + duration)}",
         f"SUMMARY:{_escape(summary)}",
         f"LOCATION:{_escape(location)}",
         f"DESCRIPTION:{_escape(description)}",
@@ -72,12 +72,23 @@ def _event(s: dict, stamp: str) -> list[str]:
     ]
 
 
-def render_ics(showings: list[dict], now: datetime | None = None) -> str:
+def _duration(s: dict, movies: dict) -> timedelta:
+    meta = movies.get(f"{s['cinema']}|{s['movie']}") or {}
+    runtime = meta.get("runtime_min")
+    if isinstance(runtime, int) and runtime > 0:
+        return timedelta(minutes=runtime)
+    return _EVENT_DURATION
+
+
+def render_ics(
+    showings: list[dict], now: datetime | None = None, *, movies: dict | None = None
+) -> str:
+    movies = movies or {}
     stamp = _fmt_utc(now or datetime.now(timezone.utc))
     lines = list(_CAL_HEADER)
     for s in showings:
         try:
-            lines.extend(_event(s, stamp))
+            lines.extend(_event(s, stamp, _duration(s, movies)))
         except (KeyError, ValueError):
             continue  # skip malformed showing, don't fail the whole feed
     lines.append("END:VCALENDAR")

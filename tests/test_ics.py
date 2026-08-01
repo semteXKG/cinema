@@ -75,12 +75,15 @@ def test_malformed_start_is_skipped():
     assert body.count("BEGIN:VEVENT") == 1
 
 
-def write_payload(data_dir, showings):
-    save_showings(data_dir, {
+def write_payload(data_dir, showings, movies=None):
+    payload = {
         "generated_at": "2026-07-31T12:00:00+02:00",
         "sources": {"cineplexx": "ok"},
         "showings": showings,
-    })
+    }
+    if movies is not None:
+        payload["movies"] = movies
+    save_showings(data_dir, payload)
 
 
 def test_route_content_type_and_one_event_per_showing(tmp_path):
@@ -110,3 +113,31 @@ def test_sidebar_has_subscribe_link(tmp_path):
     assert 'href="/showings.ics"' in html
     assert "SUBSCRIBE" in html
     assert "Add showings to your calendar" in html
+
+
+ODYSSEY_MOVIES = {
+    "Cineplexx Linz|The Odyssey": {
+        "runtime_min": 121,
+        "genres": ["Abenteuer"],
+        "poster": None,
+        "poster_file": None,
+    }
+}
+
+
+def test_dtend_uses_runtime_when_known():
+    body = render_ics([SHOWING], now=NOW, movies=ODYSSEY_MOVIES)
+    assert "DTSTART:20260802T170000Z" in body
+    assert "DTEND:20260802T190100Z" in body
+
+
+def test_dtend_falls_back_to_two_hours_for_unknown_movie():
+    movies = {"Cineplexx Linz|Some Other Film": {"runtime_min": 300}}
+    body = render_ics([SHOWING], now=NOW, movies=movies)
+    assert "DTEND:20260802T190000Z" in body
+
+
+def test_route_uses_runtime_from_payload(tmp_path):
+    write_payload(tmp_path, [SHOWING], movies=ODYSSEY_MOVIES)
+    body = create_app(tmp_path).test_client().get("/showings.ics").data.decode()
+    assert "DTEND:20260802T190100Z" in body
