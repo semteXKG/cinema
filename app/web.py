@@ -84,7 +84,7 @@ _TEMPLATE = """<!doctype html>
    font-family:'Limelight',system-ui,sans-serif;font-weight:400;
    font-size:1.15rem;letter-spacing:.06em;
   }
-  .filmrow{display:flex;gap:.8rem;align-items:flex-start}
+  .filmrow{display:flex;gap:.8rem;align-items:center}
   .filmrow img{width:58px;border-radius:4px;border:1px solid var(--edge);flex:0 0 auto}
   .filmtitle{min-width:0}
   .filmmeta{color:var(--dim);font-size:.8rem;margin-top:.15rem}

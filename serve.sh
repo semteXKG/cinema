@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-DATA_DIR="${DATA_DIR:-./data}"
+DATA_DIR="$(realpath "${DATA_DIR:-./data}")"
 PIDFILE="$DATA_DIR/web.pid"
 PORT="${PORT:-8080}"
 PY=./.venv/bin/python
@@ -15,16 +15,50 @@ mkdir -p "$DATA_DIR"
 
 seed_demo() {
     "$PY" - "$DATA_DIR" <<'EOF'
-import sys
+import hashlib, struct, sys, zlib
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from pathlib import Path
 from app.state import save_showings, load_showings
 
-if load_showings(sys.argv[1]):
+data_dir = Path(sys.argv[1])
+if load_showings(data_dir):
     raise SystemExit
-save_showings(sys.argv[1], {
+
+poster_url = "https://poster.example/odyssey.jpg"
+poster_name = hashlib.sha1(poster_url.encode()).hexdigest()[:16] + ".png"
+posters_dir = data_dir / "posters"
+posters_dir.mkdir(parents=True, exist_ok=True)
+
+# tiny valid 1×1 white PNG
+img = struct.pack(">I", 13) + b"IHDR" + struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+img += struct.pack(">I", zlib.crc32(img[4:]) & 0xffffffff)
+raw_data = b"\x00\xff\xff\xff"
+idat = struct.pack(">I", len(zlib.compress(raw_data))) + b"IDAT" + zlib.compress(raw_data)
+idat += struct.pack(">I", zlib.crc32(idat[4:]) & 0xffffffff)
+iend = struct.pack(">I", 0) + b"IEND" + struct.pack(">I", zlib.crc32(b"IEND") & 0xffffffff)
+poster_png = b"\x89PNG\r\n\x1a\n" + img + idat + iend
+
+if not (posters_dir / poster_name).exists():
+    (posters_dir / poster_name).write_bytes(poster_png)
+
+save_showings(data_dir, {
     "generated_at": datetime.now(ZoneInfo("Europe/Vienna")).isoformat(),
     "sources": {"cineplexx": "ok", "megaplex": "ok"},
+    "movies": {
+        "Megaplex PlusCity|The Odyssey": {
+            "runtime_min": 173,
+            "genres": ["Drama", "Action", "Abenteuer", "Fantasy"],
+            "poster": poster_url,
+            "poster_file": poster_name,
+        },
+        "Cineplexx Linz|The Odyssey": {
+            "runtime_min": 180,
+            "genres": ["Abenteuer", "Historie"],
+            "poster": poster_url,
+            "poster_file": poster_name,
+        },
+    },
     "showings": [
         {"cinema": "Megaplex PlusCity", "movie": "The Odyssey",
          "start": "2026-08-02T20:30:00+02:00", "version": "OV - IMAX 2D",
