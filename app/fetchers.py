@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from datetime import date, datetime, timedelta
@@ -10,7 +11,7 @@ from zoneinfo import ZoneInfo
 import requests
 from bs4 import BeautifulSoup
 
-from .models import Showing, cineplexx_session_version, megaplex_version
+from .models import MovieMeta, Showing, cineplexx_session_version, megaplex_version
 
 CINEPLEXX_BASE = "https://app.cineplexx.at"
 CINEPLEXX_HEADERS = {
@@ -66,7 +67,7 @@ class HttpClient:
             raise SourceError(f"GET {url} failed: {e}") from e
 
 
-def fetch_cineplexx(http) -> list[Showing]:
+def fetch_cineplexx(http) -> tuple[list[Showing], dict[str, MovieMeta]]:
     movies = http.get_json(
         f"{CINEPLEXX_BASE}/api/v1/cinemasweb/{CINEPLEXX_CINEMA_ID}/movies",
         headers=CINEPLEXX_HEADERS,
@@ -84,10 +85,13 @@ def fetch_cineplexx(http) -> list[Showing]:
         if not isinstance(data, list):
             raise SourceError(f"Cineplexx: invalid sessions for {movie['id']}")
         sessions_by_movie[movie["id"]] = data
-    return parse_cineplexx_showings(movies, sessions_by_movie)
+    showings, metas = parse_cineplexx_showings(movies, sessions_by_movie)
+    return showings, {
+        f"{CINEPLEXX_CINEMA_NAME}|{title}": meta for title, meta in metas.items()
+    }
 
 
-def fetch_megaplex(http, today: date) -> list[Showing]:
+def fetch_megaplex(http, today: date) -> tuple[list[Showing], dict[str, MovieMeta]]:
     links: list[str] = []
     for i in range(MEGAPLEX_DAYS):
         day = today + timedelta(days=i)
@@ -101,18 +105,24 @@ def fetch_megaplex(http, today: date) -> list[Showing]:
             if url not in links:
                 links.append(url)
     showings: list[Showing] = []
+    metas: dict[str, MovieMeta] = {}
     for url in links:
         html = http.get_text(url, headers=MEGAPLEX_HEADERS)
-        showings.extend(parse_megaplex_film_page(html, url, today))
-    return showings
+        page_showings, page_metas = parse_megaplex_film_page(html, url, today)
+        showings.extend(page_showings)
+        for title, meta in page_metas.items():
+            metas.setdefault(f"{MEGAPLEX_CINEMA_NAME}|{title}", meta)
+    return showings, metas
 
 
 def parse_cineplexx_showings(
     movies: list[dict], sessions_by_movie: dict[str, list]
-) -> list[Showing]:
+) -> tuple[list[Showing], dict[str, MovieMeta]]:
     showings = []
+    metas: dict[str, MovieMeta] = {}
     for movie in movies:
         title = (movie.get("title") or "").lstrip("*").strip()
+        metas.setdefault(title, _cineplexx_meta(movie))
         url = f"https://cineplexx.at/film/{movie.get('shortURL', '')}"
         for group in sessions_by_movie.get(movie.get("id"), []):
             for session in group.get("sessions", []):
@@ -132,10 +142,52 @@ def parse_cineplexx_showings(
                     )
                 )
     showings.sort(key=lambda s: s.start)
-    return showings
+    return showings, metas
 
 
 MEGAPLEX_BASE = "https://www.megaplex.at"
+
+
+def _cineplexx_meta(movie: dict) -> MovieMeta:
+    runtime = movie.get("runTime") or None  # missing or 0 -> None
+    genres = tuple(g for g in (movie.get("genres") or []) if isinstance(g, str))
+    poster = movie.get("posterImage") or None
+    return MovieMeta(runtime, genres, poster)
+
+
+_LD_DURATION_RE = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?")
+
+
+def _megaplex_jsonld_meta(soup: BeautifulSoup) -> MovieMeta | None:
+    """Extract runtime/genre/poster from the schema.org Movie JSON-LD block."""
+    for tag in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(tag.string or "")
+        except ValueError:
+            continue
+        blocks = data if isinstance(data, list) else [data]
+        for block in blocks:
+            if not isinstance(block, dict) or block.get("@type") != "Movie":
+                continue
+            runtime = None
+            m = _LD_DURATION_RE.fullmatch(str(block.get("duration") or ""))
+            if m:
+                runtime = int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+                runtime = runtime or None
+            genre = block.get("genre") or []
+            if isinstance(genre, str):
+                genre = [genre]
+            image = block.get("image") or []
+            if isinstance(image, str):
+                image = [image]
+            return MovieMeta(
+                runtime_min=runtime,
+                genres=tuple(g for g in genre if isinstance(g, str)),
+                poster=image[0] if image else None,
+            )
+    return None
+
+
 MEGAPLEX_CINEMA_NAME = "Megaplex PlusCity"
 
 _TZ = ZoneInfo("Europe/Vienna")
@@ -166,7 +218,9 @@ def _parse_day(label: str, today: date) -> date | None:
     return None
 
 
-def parse_megaplex_film_page(html: str, url: str, today: date) -> list[Showing]:
+def parse_megaplex_film_page(
+    html: str, url: str, today: date
+) -> tuple[list[Showing], dict[str, MovieMeta]]:
     soup = BeautifulSoup(html, "html.parser")
     if "Kinoprogramm" not in soup.get_text():
         raise SourceError(f"unexpected Megaplex film page: {url}")
@@ -175,6 +229,10 @@ def parse_megaplex_film_page(html: str, url: str, today: date) -> list[Showing]:
     if h1:
         raw = h1.get_text(" ", strip=True)
         title = re.split(r"\s*\(Pluscity\)|\s+-\s+OV", raw)[0].strip()
+    metas: dict[str, MovieMeta] = {}
+    meta = _megaplex_jsonld_meta(soup)
+    if meta and title:
+        metas[title] = meta
     showings: list[Showing] = []
     for group in soup.select("div.day-group"):
         h3 = group.find("h3")
@@ -210,4 +268,4 @@ def parse_megaplex_film_page(html: str, url: str, today: date) -> list[Showing]:
                 )
             )
     showings.sort(key=lambda s: s.start)
-    return showings
+    return showings, metas

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import fetchers, notify
 from . import state as state_mod
-from .models import Showing
+from .models import MovieMeta, Showing
 
 
 @dataclass
@@ -49,10 +49,13 @@ def run_check(
     can_notify = bool(config.telegram_token and config.telegram_chat_id)
 
     all_showings: list[Showing] = []
+    all_metas: dict[str, MovieMeta] = {}
     health: dict[str, str] = {}
     for source in config.sources:
         try:
-            all_showings.extend(fetcher_map[source](http, now.date()))
+            showings, metas = fetcher_map[source](http, now.date())
+            all_showings.extend(showings)
+            all_metas.update(metas)
             health[source] = "ok"
         except fetchers.SourceError as e:
             health[source] = "error"
@@ -77,11 +80,18 @@ def run_check(
         state["seen"].setdefault(s.key, now.isoformat())
     state_mod.prune_state(state, now)
     state_mod.save_state(data_dir, state)
+    wanted = {f"{s.cinema}|{s.movie}" for s in upcoming}
+    movie_dicts = {
+        key: state_mod.movie_meta_to_dict(m)
+        for key, m in all_metas.items()
+        if key in wanted
+    }
     state_mod.save_showings(
         data_dir,
         {
             "generated_at": now.isoformat(),
             "sources": health,
+            "movies": movie_dicts,
             "showings": [
                 state_mod.showing_to_dict(s)
                 for s in sorted(upcoming, key=lambda x: (x.start, x.cinema))

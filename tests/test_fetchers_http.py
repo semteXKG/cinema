@@ -48,9 +48,13 @@ def make_cineplexx_http():
 
 
 def test_fetch_cineplexx_returns_ov_showings():
-    showings = fetch_cineplexx(make_cineplexx_http())
+    showings, metas = fetch_cineplexx(make_cineplexx_http())
     assert len(showings) == 6
     assert all(s.cinema == "Cineplexx Linz" for s in showings)
+    meta = metas["Cineplexx Linz|The Odyssey"]
+    assert meta.runtime_min == 180
+    # namespaced with the cinema name
+    assert all(k.startswith("Cineplexx Linz|") for k in metas)
 
 
 def test_fetch_cineplexx_empty_movie_list_is_source_error():
@@ -71,12 +75,15 @@ def test_fetch_megaplex_returns_ov_showings():
         "<html><body><h1>Other (Pluscity) - OV</h1>"
         "Aktuelles Kinoprogramm</body></html>"
     )
-    showings = fetch_megaplex(http, TODAY)
+    showings, metas = fetch_megaplex(http, TODAY)
     assert len(showings) == 8
     assert all(s.cinema == "Megaplex PlusCity" for s in showings)
     # 14 program pages (one per day) + film pages
     program_calls = [u for u in http.requested if "/kinoprogramm/linz/" in u]
     assert len(program_calls) == 14
+    # only the odyssey page carries JSON-LD metadata
+    assert list(metas) == ["Megaplex PlusCity|Die Odyssee"]
+    assert metas["Megaplex PlusCity|Die Odyssee"].runtime_min == 173
 
 
 def test_fetch_megaplex_broken_page_is_source_error():

@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.checker import Config, run_check
-from app.models import Showing
+from app.models import MovieMeta, Showing
 from app.state import load_showings, load_state
 
 TZ = ZoneInfo("Europe/Vienna")
@@ -15,14 +15,15 @@ def make_showing(cinema="Cineplexx Linz", movie="The Odyssey", day=20):
 
 
 class FakeFetcher:
-    def __init__(self, showings=None, error=None):
+    def __init__(self, showings=None, metas=None, error=None):
         self.showings = showings or []
+        self.metas = metas or {}
         self.error = error
 
     def __call__(self, http, today=None):
         if self.error:
             raise self.error
-        return self.showings
+        return self.showings, self.metas
 
 
 def test_new_showings_trigger_one_message(tmp_path):
@@ -90,3 +91,24 @@ def test_no_telegram_configured_still_writes_state(tmp_path):
     cfg = Config(telegram_token=None, telegram_chat_id=None, sources=("cineplexx",))
     run_check(None, tmp_path, cfg, NOW, fetcher_map=fetchers)
     assert make_showing().key in load_state(tmp_path)["seen"]
+
+
+def test_showings_json_contains_movies_filtered_to_shown(tmp_path):
+    metas = {
+        "Cineplexx Linz|The Odyssey": MovieMeta(
+            180, ("Abenteuer", "Historie"), "https://x/p.jpg"
+        ),
+        "Cineplexx Linz|Not Shown": MovieMeta(90, ("Drama",), "https://x/q.jpg"),
+    }
+    fetchers = {"cineplexx": FakeFetcher([make_showing()], metas=metas)}
+    cfg = Config(telegram_token=None, telegram_chat_id=None, sources=("cineplexx",))
+    run_check(None, tmp_path, cfg, NOW, fetcher_map=fetchers)
+    movies = load_showings(tmp_path)["movies"]
+    # meta for a movie without upcoming showings is filtered out
+    assert list(movies) == ["Cineplexx Linz|The Odyssey"]
+    assert movies["Cineplexx Linz|The Odyssey"] == {
+        "runtime_min": 180,
+        "genres": ["Abenteuer", "Historie"],
+        "poster": "https://x/p.jpg",
+        "poster_file": None,  # filled by the poster cache (Task 3)
+    }
