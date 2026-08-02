@@ -83,7 +83,7 @@ impl HttpClient {
 #[cfg(test)]
 pub(crate) fn fixture(name: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../tests/fixtures")
+        .join("tests/fixtures")
         .join(name);
     std::fs::read_to_string(path).unwrap()
 }
