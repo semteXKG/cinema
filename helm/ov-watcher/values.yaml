@@ -17,6 +17,7 @@ secrets:
   telegramBotToken: ""
   # Öffentlicher Kanal: Chat-ID ist der @-Name (Bot muss Kanal-Admin sein).
   telegramChatId: "@ov_linz"
+  databaseUrl: ""     # only used when postgres.create=false
 
 resources:
   requests:
@@ -28,3 +29,8 @@ resources:
 
 ingress:
   host: cinema.k-labs.app
+
+postgres:
+  create: true
+  password: ""        # set once via --set, must stay stable afterwards
+  storage: 1Gi
