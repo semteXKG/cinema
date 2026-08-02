@@ -10,7 +10,7 @@ State lives in Postgres; poster images are cached under `DATA_DIR/posters/`.
 - `backend/` — Rust/axum: `models.rs`, `fetchers/` (cineplexx, megaplex),
   `checker.rs` (dedup/pruning + check orchestration), `notify.rs` (Telegram),
   `ics.rs` (calendar feed), `db.rs` (Postgres), `web.rs` (API + static files),
-  `import.rs` (JSON cutover), `main.rs` (entrypoint: scheduler loop + web server).
+  `main.rs` (entrypoint: scheduler loop + web server).
 - `frontend/` — React + Vite; dev server proxies `/api`, `/healthz`, `/showings.ics`.
 - `k8s/`, `helm/`, `docker-compose.yml`, `Dockerfile` — deployment.
 - State in Postgres; posters cached under `DATA_DIR/posters/`.
