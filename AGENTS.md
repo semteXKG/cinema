@@ -1,49 +1,43 @@
 # OV-Kino Linz
 
 Watcher that detects new OV/OmU showings at Cineplexx Linz and Megaplex PlusCity,
-sends Telegram alerts to the public channel `@ov_linz`, and serves a small web page
-of upcoming showings. Python/Flask, no DB — state lives in JSON files under `DATA_DIR`.
+sends Telegram alerts to the public channel `@ov_linz`, and serves a web page
+of upcoming showings. Rust backend (axum + Postgres) with a React frontend.
+State lives in Postgres; poster images are cached under `DATA_DIR/posters/`.
 
 ## Layout
 
-- `app/fetchers.py` — cinema program fetchers (cineplexx, megaplex); each returns `(showings, movie_metas)`
-- `app/checker.py` — dedup/pruning + check orchestration (`Config`, `run_check`); caches poster images under `DATA_DIR/posters/`
-- `app/notify.py` — Telegram alerts (`send_telegram`)
-- `app/web.py` — read-only web UI (`create_app(data_dir)`); serves cached posters at `/posters/<name>`
-- `app/ics.py` — ICS calendar feed renderer (`render_ics`), served at `/showings.ics`
-- `app/state.py` — `save_showings`/`load_showings` JSON persistence; `showings.json` carries a `"movies"` map (`"Cinema|Title"` → runtime/genres/poster) alongside the flat `"showings"` list.
-- `app/main.py` — entrypoint: scheduler loop + web server (env: `DATA_DIR`, `PORT`,
-  `CHECK_INTERVAL_HOURS`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SOURCES`)
+- `backend/` — Rust/axum: `models.rs`, `fetchers/` (cineplexx, megaplex),
+  `checker.rs` (dedup/pruning + check orchestration), `notify.rs` (Telegram),
+  `ics.rs` (calendar feed), `db.rs` (Postgres), `web.rs` (API + static files),
+  `import.rs` (JSON cutover), `main.rs` (entrypoint: scheduler loop + web server).
+- `frontend/` — React + Vite; dev server proxies `/api`, `/healthz`, `/showings.ics`.
+- `k8s/`, `helm/`, `docker-compose.yml`, `Dockerfile` — deployment.
+- State in Postgres; posters cached under `DATA_DIR/posters/`.
 
-## Running the web UI locally
+Env vars (`backend/src/config.rs`): `DATABASE_URL` (required), `DATA_DIR`,
+`STATIC_DIR`, `PORT`, `CHECK_INTERVAL_HOURS`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`, `SOURCES`.
 
-Use `./serve.sh` — starts `app/web.py` only (no scheduler, no network fetches):
+## Running locally
 
 ```
-./serve.sh start     # serve http://localhost:8080, seeds demo data if ./data is empty
-./serve.sh stop      # via PID file ./data/web.pid
-./serve.sh restart
-./serve.sh status
+docker compose up -d db
+export DATABASE_URL=postgres://ov:ov@localhost:5432/ov
+cd backend && cargo run          # http://localhost:8080
+cd frontend && npm install && npm run dev   # optional Vite dev server
 ```
-
-Overrides: `PORT=9090 ./serve.sh start`, `DATA_DIR=/tmp/x ./serve.sh start`.
-Delete `./data/showings.json` and restart to re-seed demo data.
 
 ## Tests
 
 ```
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m pytest -q
+cd backend && cargo test          # needs DATABASE_URL (docker compose up -d db);
+                                  # #[sqlx::test] creates per-test DBs
+cd frontend && npm test
 ```
 
-## Background jobs via the bash tool
+## Import-state cutover
 
-Long-running/backgrounded processes launched through the bash tool hold the tool's
-output pipe open, so the tool waits out its timeout even though the process started
-fine. Launch detached instead:
-
-```
-( setsid cmd </dev/null >/tmp/x.log 2>&1 & )
-```
-
-Prefer `serve.sh` over ad-hoc server launches.
+`ov-watcher import-state <data_dir>` seeds the DB from the old Python app's
+JSON state (showings.json/state.json), so the first check doesn't re-notify
+existing showings.
