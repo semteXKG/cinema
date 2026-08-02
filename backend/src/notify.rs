@@ -1,5 +1,4 @@
 use crate::models::{MovieMeta, Showing};
-use chrono::Utc;
 use std::collections::HashMap;
 
 pub const MAX_LEN: usize = 4096;
@@ -192,8 +191,10 @@ impl Notifier for TelegramNotifier {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use chrono::Utc;
     use chrono_tz::Europe::Vienna;
 
+    #[allow(clippy::too_many_arguments)]
     fn make(
         cinema: &str,
         movie: &str,

@@ -160,6 +160,9 @@ fn short_version(version: &str) -> &str {
     }
 }
 
+type MovieGroup<'a> = (String, Vec<&'a ShowingView>);
+type CinemaGroup<'a> = (String, Vec<MovieGroup<'a>>);
+
 pub fn build_payload(
     run_at: DateTime<Utc>,
     statuses: Vec<(String, String)>,
@@ -167,7 +170,7 @@ pub fn build_payload(
 ) -> ApiPayload {
     // group by cinema, then movie, preserving order of first appearance
     // (the query is already sorted by start, cinema)
-    let mut cinemas: Vec<(String, Vec<(String, Vec<&ShowingView>)>)> = Vec::new();
+    let mut cinemas: Vec<CinemaGroup> = Vec::new();
     for v in &views {
         let cinema_group = match cinemas.iter_mut().find(|(name, _)| name == &v.cinema) {
             Some((_, movies)) => movies,

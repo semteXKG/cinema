@@ -24,6 +24,8 @@ static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(OV|OmU|Omd
 static LANG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\(([^)]*)\)").unwrap());
 
 impl Showing {
+    // Documented dedup-key contract; pinned by showing_key_uses_vienna_iso.
+    #[allow(dead_code)]
     pub fn key(&self) -> String {
         format!("{}|{}|{}", self.cinema, self.movie, vienna_iso(self.start))
     }
