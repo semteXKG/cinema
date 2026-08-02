@@ -35,9 +35,3 @@ cd backend && cargo test          # needs DATABASE_URL (docker compose up -d db)
                                   # #[sqlx::test] creates per-test DBs
 cd frontend && npm test
 ```
-
-## Import-state cutover
-
-`ov-watcher import-state <data_dir>` seeds the DB from the old Python app's
-JSON state (showings.json/state.json), so the first check doesn't re-notify
-existing showings.
