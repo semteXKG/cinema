@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod fetchers;
 mod ics;
+mod import;
 mod models;
 mod notify;
 mod web;
@@ -74,6 +75,15 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let pool = PgPool::connect(&config.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+
+    if std::env::args().nth(1).as_deref() == Some("import-state") {
+        let dir = std::env::args()
+            .nth(2)
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| config.data_dir.clone());
+        import::run(&pool, &dir).await?;
+        return Ok(());
+    }
 
     {
         let pool = pool.clone();
