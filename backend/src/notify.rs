@@ -116,7 +116,7 @@ pub fn chunk_text(text: &str, limit: usize) -> Vec<String> {
         let mut line = line.to_string();
         while line.chars().count() > limit {
             if !current.is_empty() {
-                chunks.push(std::mem::take(&mut current));
+                chunks.push(std::mem::take(&mut current) + "\n");
             }
             let (head, tail) = split_at_char(&line, limit);
             chunks.push(head);
@@ -425,6 +425,14 @@ mod tests {
         let text = "y".repeat(5000);
         let chunks = chunk_text(&text, MAX_LEN);
         assert_eq!(chunks.len(), 2);
+        assert!(chunks.iter().all(|c| c.chars().count() <= MAX_LEN));
+        assert_eq!(chunks.concat(), text);
+    }
+
+    #[test]
+    fn chunk_preserves_newline_between_two_overlong_lines() {
+        let text = format!("{}\n{}", "y".repeat(5000), "z".repeat(5000));
+        let chunks = chunk_text(&text, MAX_LEN);
         assert!(chunks.iter().all(|c| c.chars().count() <= MAX_LEN));
         assert_eq!(chunks.concat(), text);
     }
