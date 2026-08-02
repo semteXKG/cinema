@@ -1,5 +1,6 @@
 mod config;
 mod db;
+mod models;
 mod web;
 
 #[tokio::main]
