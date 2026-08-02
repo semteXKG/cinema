@@ -15,5 +15,20 @@ services:
       timeout: 3s
       retries: 20
 
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://ov:ov@db:5432/ov
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ov-data:/data
+
 volumes:
   pgdata: {}
+  ov-data: {}

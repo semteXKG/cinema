@@ -1,0 +1,8 @@
+**/target
+**/node_modules
+frontend/dist
+.venv
+data
+.git
+docs
+.pytest_cache
