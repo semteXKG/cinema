@@ -6,9 +6,20 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# backend build
-FROM rust:1-slim-bookworm AS backend
+# backend dependency cache
+FROM rust:1-slim-bookworm AS chef
 WORKDIR /build
+RUN cargo install cargo-chef --locked
+
+FROM chef AS planner
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
+RUN cargo chef prepare --recipe-path recipe.json
+
+# backend build
+FROM chef AS backend
+COPY --from=planner /build/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/migrations ./migrations
 COPY backend/src ./src

@@ -99,6 +99,8 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
