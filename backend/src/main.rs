@@ -1,3 +1,4 @@
+mod checker;
 mod config;
 mod db;
 mod fetchers;
