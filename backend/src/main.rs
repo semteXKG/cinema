@@ -14,6 +14,7 @@ use fetchers::HttpClient;
 use notify::{Notifier, TelegramNotifier};
 use sqlx::PgPool;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 pub async fn scheduler_loop<F, Fut>(interval: Duration, run: F)
@@ -86,6 +87,16 @@ async fn main() -> anyhow::Result<()> {
             .await;
         });
     }
+
+    let state = web::AppState {
+        pool,
+        data_dir: config.data_dir.clone(),
+        static_dir: config.static_dir.clone(),
+    };
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    tracing::info!("starting web server on port {}", config.port);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, web::router(state)).await?;
 
     Ok(())
 }
