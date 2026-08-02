@@ -2,6 +2,7 @@ mod config;
 mod db;
 mod fetchers;
 mod models;
+mod notify;
 mod web;
 
 #[tokio::main]
