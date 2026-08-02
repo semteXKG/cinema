@@ -193,6 +193,15 @@ mod tests {
         assert_eq!(id1, id2);
         let view = upcoming_view(&pool, Utc::now()).await.unwrap();
         assert!(view.is_empty()); // no showings yet
+                                  // the second upsert must have overwritten the metadata
+        insert_showing(&pool, id2, at(19), "OV", "Saal 6", "https://x", at(12))
+            .await
+            .unwrap();
+        let view = upcoming_view(&pool, at(0)).await.unwrap();
+        assert_eq!(view.len(), 1);
+        assert_eq!(view[0].runtime_min, Some(120));
+        assert_eq!(view[0].genres, vec!["Action"]);
+        assert_eq!(view[0].poster_file.as_deref(), Some("a.jpg"));
     }
 
     #[sqlx::test(migrations = "./migrations")]

@@ -119,7 +119,12 @@ async fn cache_posters(
                 }
             }
         }
-        cached.insert(key.clone(), Some(name));
+        if target.exists() {
+            cached.insert(key.clone(), Some(name));
+        } else {
+            // write/rename failed -> don't reference a missing file
+            cached.insert(key.clone(), None);
+        }
     }
     cached
 }

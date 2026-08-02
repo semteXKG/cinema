@@ -31,6 +31,11 @@ impl Config {
             .unwrap_or_else(|| "3".into())
             .parse()
             .map_err(|_| anyhow::anyhow!("CHECK_INTERVAL_HOURS must be a number"))?;
+        if !hours.is_finite() || hours < 0.0 {
+            return Err(anyhow::anyhow!(
+                "CHECK_INTERVAL_HOURS must be a non-negative number"
+            ));
+        }
         let port: u16 = get("PORT")
             .unwrap_or_else(|| "8080".into())
             .parse()
@@ -104,5 +109,19 @@ mod tests {
     fn invalid_port_is_an_error() {
         let cfg = Config::from_lookup(env_of(&[("DATABASE_URL", "postgres://x"), ("PORT", "abc")]));
         assert!(cfg.is_err());
+    }
+
+    #[test]
+    fn non_finite_or_negative_check_interval_is_an_error() {
+        for bad in ["-1", "nan", "inf", "abc"] {
+            let cfg = Config::from_lookup(env_of(&[
+                ("DATABASE_URL", "postgres://x"),
+                ("CHECK_INTERVAL_HOURS", bad),
+            ]));
+            assert!(
+                cfg.is_err(),
+                "expected error for CHECK_INTERVAL_HOURS={bad}"
+            );
+        }
     }
 }
