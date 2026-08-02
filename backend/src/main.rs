@@ -1,6 +1,7 @@
 mod config;
 mod db;
 mod fetchers;
+mod ics;
 mod models;
 mod notify;
 mod web;
