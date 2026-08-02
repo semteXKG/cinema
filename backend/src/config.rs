@@ -19,8 +19,8 @@ impl Config {
     }
 
     pub fn from_lookup(get: impl Fn(&str) -> Option<String>) -> anyhow::Result<Self> {
-        let database_url = get("DATABASE_URL")
-            .ok_or_else(|| anyhow::anyhow!("DATABASE_URL is required"))?;
+        let database_url =
+            get("DATABASE_URL").ok_or_else(|| anyhow::anyhow!("DATABASE_URL is required"))?;
         let sources = get("SOURCES")
             .unwrap_or_else(|| "cineplexx,megaplex".into())
             .split(',')
@@ -43,7 +43,9 @@ impl Config {
             data_dir: PathBuf::from(get("DATA_DIR").unwrap_or_else(|| "./data".into())),
             port,
             database_url,
-            static_dir: PathBuf::from(get("STATIC_DIR").unwrap_or_else(|| "./frontend/dist".into())),
+            static_dir: PathBuf::from(
+                get("STATIC_DIR").unwrap_or_else(|| "./frontend/dist".into()),
+            ),
         })
     }
 }
@@ -54,8 +56,10 @@ mod tests {
     use std::collections::HashMap;
 
     fn env_of(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-        let map: HashMap<String, String> =
-            pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let map: HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
         move |key| map.get(key).cloned()
     }
 
@@ -98,10 +102,7 @@ mod tests {
 
     #[test]
     fn invalid_port_is_an_error() {
-        let cfg = Config::from_lookup(env_of(&[
-            ("DATABASE_URL", "postgres://x"),
-            ("PORT", "abc"),
-        ]));
+        let cfg = Config::from_lookup(env_of(&[("DATABASE_URL", "postgres://x"), ("PORT", "abc")]));
         assert!(cfg.is_err());
     }
 }

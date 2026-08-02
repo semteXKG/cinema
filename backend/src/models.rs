@@ -20,8 +20,7 @@ pub struct MovieMeta {
 
 use regex::Regex;
 
-static VERSION_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b(OV|OmU|OmdU)\b").unwrap());
+static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(OV|OmU|OmdU)\b").unwrap());
 static LANG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\(([^)]*)\)").unwrap());
 
 impl Showing {
@@ -94,7 +93,10 @@ mod tests {
         Showing {
             cinema: "Cineplexx Linz".into(),
             movie: "The Odyssey".into(),
-            start: Vienna.with_ymd_and_hms(2026, 7, 20, 19, 0, 0).unwrap().with_timezone(&Utc),
+            start: Vienna
+                .with_ymd_and_hms(2026, 7, 20, 19, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
             version: "OV".into(),
             hall: "Saal 6".into(),
             url: "https://cineplexx.at/film/die-odyssee".into(),
@@ -130,7 +132,8 @@ mod tests {
 
     #[test]
     fn cineplexx_version_omu() {
-        let s = json!({"technologies": [["2D", "OmU (Englisch)"], []], "conceptAttributesNames": []});
+        let s =
+            json!({"technologies": [["2D", "OmU (Englisch)"], []], "conceptAttributesNames": []});
         assert_eq!(cineplexx_session_version(&s).as_deref(), Some("OmU"));
     }
 
@@ -142,14 +145,21 @@ mod tests {
 
     #[test]
     fn cineplexx_version_non_english_ov() {
-        let s = json!({"technologies": [["2D", "OV (Französisch)"], []], "conceptAttributesNames": []});
+        let s =
+            json!({"technologies": [["2D", "OV (Französisch)"], []], "conceptAttributesNames": []});
         assert_eq!(cineplexx_session_version(&s), None);
     }
 
     #[test]
     fn megaplex_versions() {
-        assert_eq!(megaplex_version("OV - IMAX 2D").as_deref(), Some("OV - IMAX 2D"));
-        assert_eq!(megaplex_version("  OV - Dolby Vision 2D  ").as_deref(), Some("OV - Dolby Vision 2D"));
+        assert_eq!(
+            megaplex_version("OV - IMAX 2D").as_deref(),
+            Some("OV - IMAX 2D")
+        );
+        assert_eq!(
+            megaplex_version("  OV - Dolby Vision 2D  ").as_deref(),
+            Some("OV - Dolby Vision 2D")
+        );
         assert_eq!(megaplex_version("Dolby Atmos 2D"), None);
         assert_eq!(megaplex_version("4DX 2D"), None);
     }

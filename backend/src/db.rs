@@ -88,9 +88,11 @@ pub async fn prune(pool: &PgPool, cutoff: DateTime<Utc>) -> sqlx::Result<()> {
         .bind(cutoff)
         .execute(pool)
         .await?;
-    sqlx::query("DELETE FROM movie m WHERE NOT EXISTS (SELECT 1 FROM showing s WHERE s.movie_id = m.id)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "DELETE FROM movie m WHERE NOT EXISTS (SELECT 1 FROM showing s WHERE s.movie_id = m.id)",
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -98,12 +100,10 @@ pub async fn get_source_status(
     pool: &PgPool,
     source: &str,
 ) -> sqlx::Result<Option<(String, Option<NaiveDate>)>> {
-    sqlx::query_as(
-        "SELECT status, last_error_ping_date FROM source_status WHERE source = $1",
-    )
-    .bind(source)
-    .fetch_optional(pool)
-    .await
+    sqlx::query_as("SELECT status, last_error_ping_date FROM source_status WHERE source = $1")
+        .bind(source)
+        .fetch_optional(pool)
+        .await
 }
 
 pub async fn upsert_source_status(
@@ -168,8 +168,28 @@ mod tests {
 
     #[sqlx::test(migrations = "./migrations")]
     async fn movie_upsert_updates_metadata(pool: PgPool) {
-        let id1 = upsert_movie(&pool, "Cineplexx Linz", "F1", Some(100), &["Drama".into()], Some("https://p/1.jpg"), None).await.unwrap();
-        let id2 = upsert_movie(&pool, "Cineplexx Linz", "F1", Some(120), &["Action".into()], None, Some("a.jpg")).await.unwrap();
+        let id1 = upsert_movie(
+            &pool,
+            "Cineplexx Linz",
+            "F1",
+            Some(100),
+            &["Drama".into()],
+            Some("https://p/1.jpg"),
+            None,
+        )
+        .await
+        .unwrap();
+        let id2 = upsert_movie(
+            &pool,
+            "Cineplexx Linz",
+            "F1",
+            Some(120),
+            &["Action".into()],
+            None,
+            Some("a.jpg"),
+        )
+        .await
+        .unwrap();
         assert_eq!(id1, id2);
         let view = upcoming_view(&pool, Utc::now()).await.unwrap();
         assert!(view.is_empty()); // no showings yet
@@ -177,15 +197,37 @@ mod tests {
 
     #[sqlx::test(migrations = "./migrations")]
     async fn showing_insert_dedups(pool: PgPool) {
-        let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None).await.unwrap();
-        assert!(insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12)).await.unwrap());
-        assert!(!insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12)).await.unwrap());
+        let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
+            .await
+            .unwrap();
+        assert!(
+            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+                .await
+                .unwrap()
+        );
+        assert!(
+            !insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+                .await
+                .unwrap()
+        );
     }
 
     #[sqlx::test(migrations = "./migrations")]
     async fn view_joins_movie_metadata(pool: PgPool) {
-        let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", Some(100), &["Drama".into()], None, Some("a.jpg")).await.unwrap();
-        insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12)).await.unwrap();
+        let mid = upsert_movie(
+            &pool,
+            "Cineplexx Linz",
+            "F1",
+            Some(100),
+            &["Drama".into()],
+            None,
+            Some("a.jpg"),
+        )
+        .await
+        .unwrap();
+        insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+            .await
+            .unwrap();
         let view = upcoming_view(&pool, at(0)).await.unwrap();
         assert_eq!(view.len(), 1);
         assert_eq!(view[0].movie, "F1");
@@ -198,21 +240,39 @@ mod tests {
 
     #[sqlx::test(migrations = "./migrations")]
     async fn prune_removes_old_showings_and_orphan_movies(pool: PgPool) {
-        let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None).await.unwrap();
-        insert_showing(&pool, mid, at(1), "OV", "", "https://x", at(0)).await.unwrap();
+        let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
+            .await
+            .unwrap();
+        insert_showing(&pool, mid, at(1), "OV", "", "https://x", at(0))
+            .await
+            .unwrap();
         prune(&pool, at(2)).await.unwrap();
         assert!(upcoming_view(&pool, at(0)).await.unwrap().is_empty());
         // movie is gone too -> re-insert gets a fresh id
-        let mid2 = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None).await.unwrap();
+        let mid2 = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
+            .await
+            .unwrap();
         assert_ne!(mid, mid2);
     }
 
     #[sqlx::test(migrations = "./migrations")]
     async fn source_status_roundtrip_and_ping_date_kept(pool: PgPool) {
-        assert!(get_source_status(&pool, "megaplex").await.unwrap().is_none());
-        upsert_source_status(&pool, "megaplex", "error", Some(NaiveDate::from_ymd_opt(2026, 8, 2).unwrap())).await.unwrap();
+        assert!(get_source_status(&pool, "megaplex")
+            .await
+            .unwrap()
+            .is_none());
+        upsert_source_status(
+            &pool,
+            "megaplex",
+            "error",
+            Some(NaiveDate::from_ymd_opt(2026, 8, 2).unwrap()),
+        )
+        .await
+        .unwrap();
         // recover with ok: ping date must survive (rate limit still applies today)
-        upsert_source_status(&pool, "megaplex", "ok", None).await.unwrap();
+        upsert_source_status(&pool, "megaplex", "ok", None)
+            .await
+            .unwrap();
         let (status, ping) = get_source_status(&pool, "megaplex").await.unwrap().unwrap();
         assert_eq!(status, "ok");
         assert_eq!(ping, Some(NaiveDate::from_ymd_opt(2026, 8, 2).unwrap()));
