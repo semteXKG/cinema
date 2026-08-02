@@ -1,4 +1,5 @@
 pub mod cineplexx;
+pub mod megaplex;
 
 use reqwest::header::HeaderMap;
 use std::time::Duration;
@@ -165,5 +166,103 @@ mod tests {
                 poster: None
             }
         );
+    }
+
+    mod megaplex_tests {
+        use super::super::fixture;
+        use super::super::megaplex::*;
+        use chrono::Datelike;
+        use chrono::NaiveDate;
+        use chrono::Timelike;
+
+        fn today() -> NaiveDate {
+            NaiveDate::from_ymd_opt(2026, 7, 18).unwrap()
+        }
+
+        #[test]
+        fn parse_ov_links_unique_and_absolute() {
+            let html = fixture("megaplex_ov_program.html");
+            let links = parse_megaplex_ov_links(&html);
+            assert_eq!(
+                links,
+                vec![
+                    format!("{MEGAPLEX_BASE}/film/linz/die-odyssee/ov"),
+                    format!("{MEGAPLEX_BASE}/film/linz/insekten/ov"),
+                    format!("{MEGAPLEX_BASE}/film/linz/vaiana/ov"),
+                ]
+            );
+        }
+
+        #[test]
+        fn parse_film_page_showings() {
+            let html = fixture("megaplex_film_ov.html");
+            let url = format!("{MEGAPLEX_BASE}/film/linz/die-odyssee/ov");
+            let (showings, _) = parse_megaplex_film_page(&html, &url, today()).unwrap();
+            assert_eq!(showings.len(), 8);
+            assert!(showings.iter().all(|s| s.cinema == "Megaplex PlusCity"));
+            assert!(showings.iter().all(|s| s.movie == "Die Odyssee"));
+            assert!(showings.iter().all(|s| s.version.starts_with("OV")));
+        }
+
+        #[test]
+        fn parse_film_page_dates_and_links() {
+            let html = fixture("megaplex_film_ov.html");
+            let url = format!("{MEGAPLEX_BASE}/film/linz/die-odyssee/ov");
+            let (showings, _) = parse_megaplex_film_page(&html, &url, today()).unwrap();
+            let first = &showings[0];
+            let local = first.start.with_timezone(&chrono_tz::Europe::Vienna);
+            assert_eq!(local.day(), 18);
+            assert_eq!((local.hour(), local.minute()), (19, 30));
+            assert_eq!(first.version, "OV - Dolby Vision 2D");
+            assert_eq!(first.url, format!("{MEGAPLEX_BASE}/ticket/57419/539128"));
+            let mut days: Vec<u32> = showings
+                .iter()
+                .map(|s| s.start.with_timezone(&chrono_tz::Europe::Vienna).day())
+                .collect();
+            days.sort();
+            assert_eq!(days, vec![18, 18, 19, 20, 21, 22, 23, 28]);
+        }
+
+        #[test]
+        fn parse_film_page_metadata() {
+            let html = fixture("megaplex_film_ov.html");
+            let url = format!("{MEGAPLEX_BASE}/film/linz/die-odyssee/ov");
+            let (_, metas) = parse_megaplex_film_page(&html, &url, today()).unwrap();
+            let m = &metas["Die Odyssee"];
+            assert_eq!(m.runtime_min, Some(173)); // JSON-LD duration "PT173M"
+            assert_eq!(m.genres, vec!["Drama", "Action", "Abenteuer", "Fantasy"]);
+            assert_eq!(
+                m.poster.as_deref(),
+                Some("https://megaplexog.s3.eu-north-1.amazonaws.com/Odysee1.webp")
+            );
+        }
+
+        #[test]
+        fn parse_film_page_without_jsonld_has_no_meta() {
+            let html =
+                "<html><body><h1>Other (Pluscity) - OV</h1>Aktuelles Kinoprogramm</body></html>";
+            let (showings, metas) = parse_megaplex_film_page(html, "https://x", today()).unwrap();
+            assert!(showings.is_empty());
+            assert!(metas.is_empty());
+        }
+
+        #[test]
+        fn parse_film_page_without_kinoprogramm_is_source_error() {
+            let r =
+                parse_megaplex_film_page("<html><body>garbage</body></html>", "https://x", today());
+            assert!(r.is_err());
+        }
+
+        #[test]
+        fn parse_day_labels() {
+            let t = today();
+            assert_eq!(parse_day("Heute", t), Some(t));
+            assert_eq!(parse_day("Morgen", t), t.succ_opt());
+            assert_eq!(
+                parse_day("Montag, 20.07.2026", t),
+                NaiveDate::from_ymd_opt(2026, 7, 20)
+            );
+            assert_eq!(parse_day("unrelated", t), None);
+        }
     }
 }
