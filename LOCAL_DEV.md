@@ -2,9 +2,6 @@
 
 How to run the OV Cinema watcher locally (Rust backend + React frontend + Postgres).
 
-Verified working end to end on 2026-08-02: a check run fetched 65 real showings from both
-cinemas, the API grouped them, the SPA rendered, and ICS/posters were served.
-
 ## Prerequisites
 
 - Rust toolchain (`cargo` / `rustc`) — e.g. via rustup
@@ -118,3 +115,14 @@ The app runs fine without them (it still fetches and stores showings). To enable
 export TELEGRAM_BOT_TOKEN=...
 export TELEGRAM_CHAT_ID=@ov_linz    # or any chat/channel id
 ```
+
+## Cluster Postgres (production)
+
+```bash
+./dev/connectPostgres.sh                 # interactive psql in the cluster
+./dev/connectPostgres.sh "SELECT ..."    # one-shot query
+```
+
+SSHes to the cluster node (default `semtex@10.0.0.5`, override via `NODE=...`),
+pulls the password from the `ov-watcher-secret` k8s secret, execs into
+`ov-watcher-postgres-0`. Tables: `movie`, `showing`, `source_status`, `check_run`.
