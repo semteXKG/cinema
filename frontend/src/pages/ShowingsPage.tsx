@@ -5,7 +5,6 @@ import type { ApiPayload } from "../types";
 import { Marquee } from "../components/Marquee";
 import { Sidebar } from "../components/Sidebar";
 import { CinemaSection } from "../components/CinemaSection";
-import { Footer } from "../components/Footer";
 import { formatGeneratedAt } from "../format";
 
 const POLL_MS = 15 * 60 * 1000; // mirrors the old <meta refresh=900>
@@ -60,7 +59,6 @@ export function ShowingsPage() {
           )}
         </p>
       )}
-      <Footer />
     </>
   );
 }

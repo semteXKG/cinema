@@ -13,11 +13,12 @@
     "firstCheck": "Noch keine Daten — der erste Check läuft.",
     "noShowings": "Derzeit keine OV-Vorstellungen gefunden."
   },
+  "nav": {
+    "home": "Vorstellungen",
+    "impressum": "Impressum"
+  },
   "sources": {
     "lastChecked": "Zuletzt geprüft"
-  },
-  "footer": {
-    "impressum": "Impressum"
   },
   "impressum": {
     "title": "Impressum",
@@ -25,7 +26,6 @@
     "city": "Pregarten",
     "email": "klaus.gradinger@gmail.com",
     "private": "Privates, nicht-kommerzielles Hobbyprojekt.",
-    "takedown": "Filmdaten und Plakatbilder stammen von den öffentlichen Webseiten der Kinos. Auf kurze Anfrage werden Inhalte umgehend entfernt.",
-    "back": "← Zurück zu den Vorstellungen"
+    "takedown": "Filmdaten und Plakatbilder stammen von den öffentlichen Webseiten der Kinos. Auf kurze Anfrage werden Inhalte umgehend entfernt."
   }
 }

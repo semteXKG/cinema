@@ -1,11 +1,11 @@
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Footer } from "../components/Footer";
+import { Marquee } from "../components/Marquee";
 
 export function ImpressumPage() {
   const { t } = useTranslation();
   return (
     <div className="impressum">
+      <Marquee />
       <h1>{t("impressum.title")}</h1>
       <p>
         {t("impressum.operator")}
@@ -16,10 +16,6 @@ export function ImpressumPage() {
       </p>
       <p className="small">{t("impressum.private")}</p>
       <p className="small">{t("impressum.takedown")}</p>
-      <Link className="back" to="/">
-        {t("impressum.back")}
-      </Link>
-      <Footer />
     </div>
   );
 }

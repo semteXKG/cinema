@@ -13,11 +13,12 @@
     "firstCheck": "No data yet — the first check is running.",
     "noShowings": "No OV showings found right now."
   },
+  "nav": {
+    "home": "Showings",
+    "impressum": "Impressum"
+  },
   "sources": {
     "lastChecked": "Last checked"
-  },
-  "footer": {
-    "impressum": "Impressum"
   },
   "impressum": {
     "title": "Impressum",
@@ -25,7 +26,6 @@
     "city": "Pregarten",
     "email": "klaus.gradinger@gmail.com",
     "private": "Private, non-commercial hobby project.",
-    "takedown": "Film data and poster images are taken from the cinemas' public websites. Content is removed promptly on short request.",
-    "back": "← Back to showings"
+    "takedown": "Film data and poster images are taken from the cinemas' public websites. Content is removed promptly on short request."
   }
 }
