@@ -1,4 +1,7 @@
+import { useTranslation } from "react-i18next";
+
 export function Sidebar() {
+  const { t } = useTranslation();
   return (
     <aside className="sidebar">
       <div className="box">
@@ -12,20 +15,20 @@ export function Sidebar() {
           </svg>
         </span>
         <span className="text">
-          Get notified about new OV showings on Telegram
-          <span className="sub">Channel: @ov_linz — free, no spam, only new showings.</span>
+          {t("sidebar.telegram")}
+          <span className="sub">{t("sidebar.telegramSub")}</span>
         </span>
         <a href="https://t.me/ov_linz" target="_blank" rel="noopener">
-          JOIN
+          {t("sidebar.telegramCta")}
         </a>
       </div>
       <div className="box">
         <span className="icon">📅</span>
         <span className="text">
-          Add showings to your calendar
-          <span className="sub">Subscribe in Google, Apple or Outlook Calendar.</span>
+          {t("sidebar.calendar")}
+          <span className="sub">{t("sidebar.calendarSub")}</span>
         </span>
-        <a href="/showings.ics">SUBSCRIBE</a>
+        <a href="/showings.ics">{t("sidebar.calendarCta")}</a>
       </div>
     </aside>
   );

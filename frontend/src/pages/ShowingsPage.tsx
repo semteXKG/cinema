@@ -1,0 +1,66 @@
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { fetchShowings } from "../api";
+import type { ApiPayload } from "../types";
+import { Marquee } from "../components/Marquee";
+import { Sidebar } from "../components/Sidebar";
+import { CinemaSection } from "../components/CinemaSection";
+import { Footer } from "../components/Footer";
+import { formatGeneratedAt } from "../format";
+
+const POLL_MS = 15 * 60 * 1000; // mirrors the old <meta refresh=900>
+
+export function ShowingsPage() {
+  const { t } = useTranslation();
+  const [payload, setPayload] = useState<ApiPayload | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetchShowings()
+        .then((p) => alive && setPayload(p))
+        .catch(() => {});
+    load();
+    const id = setInterval(load, POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  return (
+    <>
+      <Marquee />
+      <div className="layout">
+        <Sidebar />
+        <main>
+          {payload === null || payload.cinemas === null ? (
+            <p className="empty">{t("empty.firstCheck")}</p>
+          ) : payload.cinemas.length === 0 ? (
+            <p className="empty">{t("empty.noShowings")}</p>
+          ) : (
+            payload.cinemas.map((c) => <CinemaSection key={c.name} cinema={c} />)
+          )}
+        </main>
+      </div>
+      {payload?.generatedAt && (
+        <p className="meta">
+          {t("sources.lastChecked")}: {formatGeneratedAt(payload.generatedAt)}
+          {payload.sources && (
+            <>
+              {" · "}Cineplexx:{" "}
+              <span className={payload.sources.cineplexx === "ok" ? "ok" : "err"}>
+                {payload.sources.cineplexx ?? "–"}
+              </span>
+              {" · "}Megaplex:{" "}
+              <span className={payload.sources.megaplex === "ok" ? "ok" : "err"}>
+                {payload.sources.megaplex ?? "–"}
+              </span>
+            </>
+          )}
+        </p>
+      )}
+      <Footer />
+    </>
+  );
+}

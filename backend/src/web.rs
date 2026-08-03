@@ -40,8 +40,7 @@ pub struct MovieView {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ShowingRow {
-    pub date: String,
-    pub time: String,
+    pub start: String,
     pub detail: String,
     pub url: String,
 }
@@ -51,12 +50,10 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::get;
 use axum::Router;
-use chrono::Datelike;
 use chrono_tz::Europe::Vienna;
 use std::collections::HashSet;
 use tower_http::services::{ServeDir, ServeFile};
 
-const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const CINEMA_ORDER: [&str; 1] = ["Megaplex PlusCity"];
 
 pub fn router(state: AppState) -> Router {
@@ -67,7 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .fallback_service(
             ServeDir::new(&state.static_dir)
-                .not_found_service(ServeFile::new(state.static_dir.join("index.html"))),
+                .fallback(ServeFile::new(state.static_dir.join("index.html"))),
         )
         .with_state(state)
 }
@@ -207,7 +204,7 @@ pub fn build_payload(
         generated_at: Some(
             run_at
                 .with_timezone(&Vienna)
-                .format("%Y-%m-%d %H:%M")
+                .format("%Y-%m-%dT%H:%M:%S%:z")
                 .to_string(),
         ),
         sources: Some(statuses.into_iter().collect()),
@@ -252,12 +249,7 @@ fn movie_view(title: String, group: &[&ShowingView]) -> MovieView {
                 parts.push(s.hall.clone());
             }
             ShowingRow {
-                date: format!(
-                    "{} {}",
-                    WEEKDAYS[local.weekday().num_days_from_monday() as usize],
-                    local.format("%d.%m.")
-                ),
-                time: local.format("%H:%M").to_string(),
+                start: local.format("%Y-%m-%dT%H:%M:%S%:z").to_string(),
                 detail: parts.join(", "),
                 url: s.url.clone(),
             }
@@ -342,7 +334,7 @@ mod tests {
             ),
         ];
         let p = build_payload(run_at(), vec![("cineplexx".into(), "ok".into())], views);
-        assert_eq!(p.generated_at.as_deref(), Some("2026-08-02 12:00"));
+        assert_eq!(p.generated_at.as_deref(), Some("2026-08-02T12:00:00+02:00"));
         // Megaplex first despite later in the alphabet
         assert_eq!(p.cinemas.as_ref().unwrap()[0].name, "Megaplex PlusCity");
         let cineplexx = &p.cinemas.as_ref().unwrap()[1];
@@ -351,8 +343,7 @@ mod tests {
         assert_eq!(m.badge.as_deref(), Some("OV"));
         assert_eq!(m.meta_line, "Abenteuer, Historie · 121 Min");
         assert_eq!(m.poster.as_deref(), Some("a.jpg"));
-        assert_eq!(m.showings[0].date, "Tue 04.08.");
-        assert_eq!(m.showings[0].time, "19:30");
+        assert_eq!(m.showings[0].start, "2026-08-04T19:30:00+02:00");
         assert_eq!(m.showings[0].detail, "Saal 7"); // badge=OV -> short version "" + hall
         let mega = &p.cinemas.as_ref().unwrap()[0].movies[0];
         assert_eq!(mega.badge.as_deref(), Some("OV"));

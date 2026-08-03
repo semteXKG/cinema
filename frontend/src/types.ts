@@ -1,6 +1,5 @@
 export interface ShowingRow {
-  date: string;
-  time: string;
+  start: string;
   detail: string;
   url: string;
 }

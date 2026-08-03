@@ -1,0 +1,31 @@
+{
+  "brand": "OV Kino Linz",
+  "tagline": "Originalfassungen in Linz",
+  "sidebar": {
+    "telegram": "Benachrichtigung über neue OV-Vorstellungen auf Telegram",
+    "telegramSub": "Kanal: @ov_linz — gratis, kein Spam, nur neue Vorstellungen.",
+    "telegramCta": "BEITRETEN",
+    "calendar": "Vorstellungen in den Kalender übernehmen",
+    "calendarSub": "In Google-, Apple- oder Outlook-Kalender abonnieren.",
+    "calendarCta": "ABONNIEREN"
+  },
+  "empty": {
+    "firstCheck": "Noch keine Daten — der erste Check läuft.",
+    "noShowings": "Derzeit keine OV-Vorstellungen gefunden."
+  },
+  "sources": {
+    "lastChecked": "Zuletzt geprüft"
+  },
+  "footer": {
+    "impressum": "Impressum"
+  },
+  "impressum": {
+    "title": "Impressum",
+    "operator": "Klaus Gradinger",
+    "city": "Pregarten",
+    "email": "klaus.gradinger@gmail.com",
+    "private": "Privates, nicht-kommerzielles Hobbyprojekt.",
+    "takedown": "Filmdaten und Plakatbilder stammen von den öffentlichen Webseiten der Kinos. Auf kurze Anfrage werden Inhalte umgehend entfernt.",
+    "back": "← Zurück zu den Vorstellungen"
+  }
+}

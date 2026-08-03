@@ -5,7 +5,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("fetchShowings", () => {
   it("returns the parsed payload", async () => {
-    const payload = { generatedAt: "2026-08-02 12:00", sources: { cineplexx: "ok" }, cinemas: [] };
+    const payload = { generatedAt: "2026-08-02T12:00:00+02:00", sources: { cineplexx: "ok" }, cinemas: [] };
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => payload }))

@@ -1,6 +1,9 @@
+import { useTranslation } from "react-i18next";
 import type { MovieView } from "../types";
+import { formatShowing } from "../format";
 
 export function MovieCard({ movie }: { movie: MovieView }) {
+  useTranslation();
   return (
     <div className="card">
       <div className="filmrow">
@@ -13,9 +16,7 @@ export function MovieCard({ movie }: { movie: MovieView }) {
       </div>
       {movie.showings.map((s, i) => (
         <a className="showing" href={s.url} key={i}>
-          <span className="when">
-            {s.date} · {s.time}
-          </span>
+          <span className="when">{formatShowing(s.start)}</span>
           {s.detail && <span className="detail">{s.detail}</span>}
         </a>
       ))}

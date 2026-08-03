@@ -1,0 +1,31 @@
+{
+  "brand": "OV Cinema Linz",
+  "tagline": "Original Versions in Linz",
+  "sidebar": {
+    "telegram": "Get notified about new OV showings on Telegram",
+    "telegramSub": "Channel: @ov_linz — free, no spam, only new showings.",
+    "telegramCta": "JOIN",
+    "calendar": "Add showings to your calendar",
+    "calendarSub": "Subscribe in Google, Apple or Outlook Calendar.",
+    "calendarCta": "SUBSCRIBE"
+  },
+  "empty": {
+    "firstCheck": "No data yet — the first check is running.",
+    "noShowings": "No OV showings found right now."
+  },
+  "sources": {
+    "lastChecked": "Last checked"
+  },
+  "footer": {
+    "impressum": "Impressum"
+  },
+  "impressum": {
+    "title": "Impressum",
+    "operator": "Klaus Gradinger",
+    "city": "Pregarten",
+    "email": "klaus.gradinger@gmail.com",
+    "private": "Private, non-commercial hobby project.",
+    "takedown": "Film data and poster images are taken from the cinemas' public websites. Content is removed promptly on short request.",
+    "back": "← Back to showings"
+  }
+}
