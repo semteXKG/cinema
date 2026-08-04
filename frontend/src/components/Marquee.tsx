@@ -8,7 +8,13 @@ export function Marquee() {
     <header className="marquee">
       <div className="bulbs"></div>
       <div className="marquee-brand">
-        <img className="marquee-logo" src="/projector-logo.png" alt="" />
+        <img
+          className="marquee-logo"
+          src="/projector-logo.png"
+          width={240}
+          height={219}
+          alt=""
+        />
         <h1>{t("brand")}</h1>
       </div>
       <p className="tagline">{t("tagline")}</p>

@@ -51,6 +51,8 @@ describe("App", () => {
       "/projector-logo.png"
     );
     expect(container.querySelector(".marquee-logo")).toHaveAttribute("alt", "");
+    expect(container.querySelector(".marquee-logo")).toHaveAttribute("width", "240");
+    expect(container.querySelector(".marquee-logo")).toHaveAttribute("height", "219");
     expect(container).not.toHaveTextContent("🎬");
   });
 
