@@ -41,6 +41,19 @@ afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => i18n.changeLanguage("en"));
 
 describe("App", () => {
+  it("renders the projector logo instead of the clapperboard emoji", () => {
+    mockFetch({ generatedAt: null, sources: {}, cinemas: [] });
+    const { container } = renderAt("/");
+
+    expect(screen.getByRole("heading", { name: "OV Cinema Linz" })).toBeInTheDocument();
+    expect(container.querySelector(".marquee-logo")).toHaveAttribute(
+      "src",
+      "/projector-logo.png"
+    );
+    expect(container.querySelector(".marquee-logo")).toHaveAttribute("alt", "");
+    expect(container).not.toHaveTextContent("🎬");
+  });
+
   it("shows 'first check' state when cinemas is null", async () => {
     mockFetch({ generatedAt: null, sources: null, cinemas: null });
     renderAt("/");

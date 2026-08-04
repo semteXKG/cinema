@@ -7,7 +7,10 @@ export function Marquee() {
   return (
     <header className="marquee">
       <div className="bulbs"></div>
-      <h1>🎬 {t("brand")}</h1>
+      <div className="marquee-brand">
+        <img className="marquee-logo" src="/projector-logo.png" alt="" />
+        <h1>{t("brand")}</h1>
+      </div>
       <p className="tagline">{t("tagline")}</p>
       <nav className="marqnav">
         <NavLink to="/">{t("nav.home")}</NavLink>
