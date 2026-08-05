@@ -1,4 +1,3 @@
-use base64::Engine;
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgPool;
 
@@ -174,21 +173,14 @@ pub async fn insert_email_token(
 }
 
 pub async fn consume_email_token(pool: &PgPool, token: &str) -> sqlx::Result<Option<String>> {
-    let row: Option<(String, bool, DateTime<Utc>)> =
-        sqlx::query_as("SELECT email, used, expires_at FROM email_tokens WHERE token = $1")
-            .bind(token)
-            .fetch_optional(pool)
-            .await?;
-    match row {
-        Some((email, used, expires)) if !used && expires > Utc::now() => {
-            sqlx::query("UPDATE email_tokens SET used = true WHERE token = $1")
-                .bind(token)
-                .execute(pool)
-                .await?;
-            Ok(Some(email))
-        }
-        _ => Ok(None),
-    }
+    let row: Option<(String,)> = sqlx::query_as(
+        "UPDATE email_tokens SET used = true WHERE token = $1 AND used = false AND expires_at > now()
+         RETURNING email",
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.0))
 }
 
 pub async fn find_or_create_user(
@@ -197,40 +189,54 @@ pub async fn find_or_create_user(
     provider_id: &str,
     email: &str,
 ) -> sqlx::Result<i64> {
-    // Check existing identity
+    let mut tx = pool.begin().await?;
+    // existing identity?
     let existing: Option<(i64,)> = sqlx::query_as(
         "SELECT user_id FROM user_identities WHERE provider = $1 AND provider_id = $2",
     )
     .bind(provider)
     .bind(provider_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
     if let Some((uid,)) = existing {
+        tx.commit().await?;
         return Ok(uid);
     }
-    // Check if a user with this email exists (for linking)
+    // existing user with this email?
     let existing_user: Option<(i64,)> = sqlx::query_as("SELECT id FROM users WHERE email = $1")
         .bind(email)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?;
     let user_id = match existing_user {
         Some((id,)) => id,
         None => {
             let row: (i64,) = sqlx::query_as("INSERT INTO users (email) VALUES ($1) RETURNING id")
                 .bind(email)
-                .fetch_one(pool)
+                .fetch_one(&mut *tx)
                 .await?;
             row.0
         }
     };
-    // Insert the identity
-    sqlx::query("INSERT INTO user_identities (user_id, provider, provider_id) VALUES ($1, $2, $3)")
-        .bind(user_id)
-        .bind(provider)
-        .bind(provider_id)
-        .execute(pool)
-        .await?;
-    Ok(user_id)
+    // insert identity, tolerate a concurrent insert winning the PK
+    sqlx::query(
+        "INSERT INTO user_identities (user_id, provider, provider_id) VALUES ($1, $2, $3)
+         ON CONFLICT (provider, provider_id) DO NOTHING",
+    )
+    .bind(user_id)
+    .bind(provider)
+    .bind(provider_id)
+    .execute(&mut *tx)
+    .await?;
+    // If the identity already existed from a concurrent request, return that user_id
+    let identity_owner: Option<(i64,)> = sqlx::query_as(
+        "SELECT user_id FROM user_identities WHERE provider = $1 AND provider_id = $2",
+    )
+    .bind(provider)
+    .bind(provider_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(identity_owner.map(|r| r.0).unwrap_or(user_id))
 }
 
 pub async fn create_session(
@@ -249,14 +255,14 @@ pub async fn create_session(
 }
 
 pub async fn lookup_session(pool: &PgPool, token: &str) -> sqlx::Result<Option<(i64, String)>> {
-    sqlx::query_as(
+    let row: Option<(i64, String)> = sqlx::query_as(
         "SELECT s.user_id, u.email FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.token = $1 AND s.expires_at > now()",
     )
     .bind(token)
     .fetch_optional(pool)
-    .await
-    .map(|r: Option<(i64, String)>| r)
+    .await?;
+    Ok(row)
 }
 
 pub async fn delete_session(pool: &PgPool, token: &str) -> sqlx::Result<()> {
@@ -277,6 +283,7 @@ pub async fn prune_expired_sessions(pool: &PgPool) -> sqlx::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
     use chrono::TimeZone;
 
     fn at(hour: u32) -> DateTime<Utc> {
