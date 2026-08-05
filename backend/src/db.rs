@@ -1,3 +1,4 @@
+use base64::Engine;
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgPool;
 
@@ -157,6 +158,122 @@ pub async fn latest_check_run(pool: &PgPool) -> sqlx::Result<Option<DateTime<Utc
     Ok(row.map(|r| r.0))
 }
 
+pub async fn insert_email_token(
+    pool: &PgPool,
+    email: &str,
+    token: &str,
+    expires_at: DateTime<Utc>,
+) -> sqlx::Result<()> {
+    sqlx::query("INSERT INTO email_tokens (token, email, expires_at) VALUES ($1, $2, $3)")
+        .bind(token)
+        .bind(email)
+        .bind(expires_at)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn consume_email_token(pool: &PgPool, token: &str) -> sqlx::Result<Option<String>> {
+    let row: Option<(String, bool, DateTime<Utc>)> =
+        sqlx::query_as("SELECT email, used, expires_at FROM email_tokens WHERE token = $1")
+            .bind(token)
+            .fetch_optional(pool)
+            .await?;
+    match row {
+        Some((email, used, expires)) if !used && expires > Utc::now() => {
+            sqlx::query("UPDATE email_tokens SET used = true WHERE token = $1")
+                .bind(token)
+                .execute(pool)
+                .await?;
+            Ok(Some(email))
+        }
+        _ => Ok(None),
+    }
+}
+
+pub async fn find_or_create_user(
+    pool: &PgPool,
+    provider: &str,
+    provider_id: &str,
+    email: &str,
+) -> sqlx::Result<i64> {
+    // Check existing identity
+    let existing: Option<(i64,)> = sqlx::query_as(
+        "SELECT user_id FROM user_identities WHERE provider = $1 AND provider_id = $2",
+    )
+    .bind(provider)
+    .bind(provider_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some((uid,)) = existing {
+        return Ok(uid);
+    }
+    // Check if a user with this email exists (for linking)
+    let existing_user: Option<(i64,)> = sqlx::query_as("SELECT id FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_optional(pool)
+        .await?;
+    let user_id = match existing_user {
+        Some((id,)) => id,
+        None => {
+            let row: (i64,) = sqlx::query_as("INSERT INTO users (email) VALUES ($1) RETURNING id")
+                .bind(email)
+                .fetch_one(pool)
+                .await?;
+            row.0
+        }
+    };
+    // Insert the identity
+    sqlx::query("INSERT INTO user_identities (user_id, provider, provider_id) VALUES ($1, $2, $3)")
+        .bind(user_id)
+        .bind(provider)
+        .bind(provider_id)
+        .execute(pool)
+        .await?;
+    Ok(user_id)
+}
+
+pub async fn create_session(
+    pool: &PgPool,
+    user_id: i64,
+    token: &str,
+    expires_at: DateTime<Utc>,
+) -> sqlx::Result<()> {
+    sqlx::query("INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)")
+        .bind(token)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn lookup_session(pool: &PgPool, token: &str) -> sqlx::Result<Option<(i64, String)>> {
+    sqlx::query_as(
+        "SELECT s.user_id, u.email FROM sessions s JOIN users u ON u.id = s.user_id
+         WHERE s.token = $1 AND s.expires_at > now()",
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await
+    .map(|r: Option<(i64, String)>| r)
+}
+
+pub async fn delete_session(pool: &PgPool, token: &str) -> sqlx::Result<()> {
+    sqlx::query("DELETE FROM sessions WHERE token = $1")
+        .bind(token)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn prune_expired_sessions(pool: &PgPool) -> sqlx::Result<()> {
+    sqlx::query("DELETE FROM sessions WHERE expires_at <= now()")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,5 +412,110 @@ mod tests {
         insert_check_run(&pool, at(1), 2, 5).await.unwrap();
         insert_check_run(&pool, at(2), 0, 3).await.unwrap();
         assert_eq!(latest_check_run(&pool).await.unwrap(), Some(at(2)));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn email_token_insert_and_consume(pool: PgPool) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() + chrono::Duration::minutes(15);
+        insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+        let email = consume_email_token(&pool, &token).await.unwrap();
+        assert_eq!(email, Some("a@b.com".into()));
+        // second consumption fails (already used)
+        let email2 = consume_email_token(&pool, &token).await.unwrap();
+        assert_eq!(email2, None);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn email_token_expired(pool: PgPool) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() - chrono::Duration::minutes(1);
+        insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+        assert_eq!(consume_email_token(&pool, &token).await.unwrap(), None);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn find_or_create_user_new(pool: PgPool) {
+        let uid = find_or_create_user(&pool, "email", "x@y.com", "x@y.com")
+            .await
+            .unwrap();
+        assert!(uid > 0);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn find_or_create_user_existing_identity(pool: PgPool) {
+        let uid1 = find_or_create_user(&pool, "google", "sub123", "a@b.com")
+            .await
+            .unwrap();
+        let uid2 = find_or_create_user(&pool, "google", "sub123", "a@b.com")
+            .await
+            .unwrap();
+        assert_eq!(uid1, uid2);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn find_or_create_user_link_by_email(pool: PgPool) {
+        let uid1 = find_or_create_user(&pool, "google", "sub123", "a@b.com")
+            .await
+            .unwrap();
+        // login via email with same email address should link to existing user
+        let uid2 = find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
+            .await
+            .unwrap();
+        assert_eq!(uid1, uid2);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn session_lifecycle(pool: PgPool) {
+        let uid = find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
+            .await
+            .unwrap();
+        let token = "sess-token-abc";
+        let expires = Utc::now() + chrono::Duration::days(30);
+        create_session(&pool, uid, token, expires).await.unwrap();
+        let found = lookup_session(&pool, token).await.unwrap();
+        assert_eq!(found, Some((uid, "a@b.com".to_string())));
+        delete_session(&pool, token).await.unwrap();
+        assert_eq!(lookup_session(&pool, token).await.unwrap(), None);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn session_expired_not_found(pool: PgPool) {
+        let uid = find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
+            .await
+            .unwrap();
+        let expires = Utc::now() - chrono::Duration::minutes(1);
+        create_session(&pool, uid, "expired-token", expires)
+            .await
+            .unwrap();
+        assert_eq!(lookup_session(&pool, "expired-token").await.unwrap(), None);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn prune_expired_sessions_works(pool: PgPool) {
+        let uid = find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
+            .await
+            .unwrap();
+        let expires_old = Utc::now() - chrono::Duration::minutes(1);
+        let expires_fresh = Utc::now() + chrono::Duration::days(1);
+        create_session(&pool, uid, "old-sess", expires_old)
+            .await
+            .unwrap();
+        create_session(&pool, uid, "fresh-sess", expires_fresh)
+            .await
+            .unwrap();
+        prune_expired_sessions(&pool).await.unwrap();
+        assert_eq!(lookup_session(&pool, "old-sess").await.unwrap(), None);
+        assert!(lookup_session(&pool, "fresh-sess").await.unwrap().is_some());
     }
 }
