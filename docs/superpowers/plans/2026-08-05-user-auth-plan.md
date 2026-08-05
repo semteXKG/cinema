@@ -636,7 +636,7 @@ async fn post_email(
 async fn get_verify(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Redirect, StatusCode> {
+) -> Result<Response, StatusCode> {
     // Implementation in Step 3
     Err(StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -786,7 +786,7 @@ Replace the `get_verify` stub:
 async fn get_verify(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Redirect, StatusCode> {
+) -> Result<Response, StatusCode> {
     let token = params.get("token").ok_or(StatusCode::BAD_REQUEST)?;
     let email = db::consume_email_token(&state.pool, token)
         .await
@@ -807,7 +807,8 @@ async fn get_verify(
                 build_session_cookie(&session_token),
             ))
         }
-        None => Ok(Redirect::to(&format!("{}/?error=invalid_token", state.base_url))),
+        None => Ok(Redirect::to(&format!("{}/?error=invalid_token", state.base_url))
+            .into_response()),
     }
 }
 ```
