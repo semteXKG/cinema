@@ -48,11 +48,9 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "OV Cinema Linz" })).toBeInTheDocument();
     expect(container.querySelector(".marquee-logo")).toHaveAttribute(
       "src",
-      "/projector-logo.png"
+      "/projector-logo.svg"
     );
     expect(container.querySelector(".marquee-logo")).toHaveAttribute("alt", "");
-    expect(container.querySelector(".marquee-logo")).toHaveAttribute("width", "240");
-    expect(container.querySelector(".marquee-logo")).toHaveAttribute("height", "219");
     expect(container).not.toHaveTextContent("🎬");
   });
 

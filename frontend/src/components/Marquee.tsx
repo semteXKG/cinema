@@ -10,9 +10,7 @@ export function Marquee() {
       <div className="marquee-brand">
         <img
           className="marquee-logo"
-          src="/projector-logo.png"
-          width={240}
-          height={219}
+          src="/projector-logo.svg"
           alt=""
         />
         <h1>{t("brand")}</h1>
