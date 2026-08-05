@@ -1,3 +1,4 @@
+mod auth;
 mod checker;
 mod config;
 mod db;
@@ -74,6 +75,9 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let pool = PgPool::connect(&config.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+    if let Err(e) = db::prune_expired_sessions(&pool).await {
+        tracing::warn!("failed to prune expired sessions: {e}");
+    }
 
     {
         let pool = pool.clone();
