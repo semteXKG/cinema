@@ -6,7 +6,7 @@
 
 **Architecture:** New `auth.rs` module handles auth endpoints and session extraction. Config gains SMTP + OAuth fields. Existing `db.rs` gains auth queries. Frontend adds a React context for auth state and login UI in the Marquee nav.
 
-**Tech Stack:** Rust/axum, sqlx/Postgres, `lettre` (SMTP), `oauth2` (SSO), `jsonwebtoken` (Apple), React 19, no new frontend deps.
+**Tech Stack:** Rust/axum, sqlx/Postgres, `lettre` (SMTP), `openidconnect` (Google/Apple SSO), `jsonwebtoken` (Apple), React 19, no new frontend deps.
 
 ## Global Constraints
 
@@ -16,7 +16,7 @@
 - Identity linking: match on `(provider, provider_id)` first; if no match but `users.email` matches, add identity to existing user; otherwise create new user.
 - Email enumeration prevention: `POST /api/auth/email` always returns `200 {"ok":true}`.
 - State CSRF cookies for OAuth are short-lived (10 minutes), Secure, SameSite=Lax.
-- `rand` crate for token generation, `lettre` for SMTP, `oauth2` for SSO, `jsonwebtoken` for Apple client secret JWT.
+- `rand` crate for token generation, `lettre` for SMTP, `openidconnect` for Google/Apple SSO (OIDC discovery + JWKS verification), `jsonwebtoken` for Apple client secret JWT.
 
 ---
 
@@ -66,12 +66,12 @@ CREATE TABLE email_tokens (
 ```toml
 rand = "0.8"
 lettre = { version = "0.11", default-features = false, features = ["builder", "rustls-tls", "smtp-transport"] }
-oauth2 = { version = "4", default-features = false, features = ["reqwest"] }
+openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
 jsonwebtoken = "9"
 base64 = "0.22"
 ```
 
-Add these after the existing `sha1` dependency line.
+Add these after the existing `sha1` dependency line. Note: `openidconnect` wraps `oauth2` internally and provides OIDC discovery, token exchange, id_token/JWKS signature verification, and UserInfo. GitHub is not OIDC, so it uses manual `reqwest` calls.
 
 - [ ] **Step 3: Run migration locally to verify it applies cleanly**
 
@@ -101,8 +101,8 @@ git commit -m "feat: add user auth migration and dependencies"
 - Modify: `backend/src/web.rs:8-14` (AppState)
 
 **Interfaces:**
-- Produces: `Config.smtp_host`, `Config.smtp_port`, `Config.smtp_username`, `Config.smtp_password`, `Config.smtp_from`, `Config.base_url`, `Config.google_client_id`, `Config.google_client_secret`, `Config.apple_client_id`, `Config.apple_client_secret`, `Config.github_client_id`, `Config.github_client_secret`
-- Produces: `AppState.base_url`, `AppState.smtp_config: Option<SmtpConfig>`, `AppState.google_oauth`, `AppState.apple_oauth`, `AppState.github_oauth`
+- Produces: `Config.smtp_host`, `Config.smtp_port`, `Config.smtp_username`, `Config.smtp_password`, `Config.smtp_from`, `Config.base_url`, `Config.google_client_id`, `Config.google_client_secret`, `Config.apple_client_id`, `Config.apple_team_id`, `Config.apple_key_id`, `Config.apple_private_key`, `Config.github_client_id`, `Config.github_client_secret`
+- Produces: `AppState.base_url`, `AppState.smtp_config: Option<SmtpConfig>`, `AppState.google_oauth: Option<OAuthConfig>`, `AppState.apple_oauth: Option<AppleConfig>`, `AppState.github_oauth: Option<OAuthConfig>`
 
 - [ ] **Step 1: Add new fields to Config struct**
 
@@ -117,7 +117,9 @@ pub base_url: String,
 pub google_client_id: Option<String>,
 pub google_client_secret: Option<String>,
 pub apple_client_id: Option<String>,
-pub apple_client_secret: Option<String>,
+pub apple_team_id: Option<String>,
+pub apple_key_id: Option<String>,
+pub apple_private_key: Option<String>,
 pub github_client_id: Option<String>,
 pub github_client_secret: Option<String>,
 ```
@@ -145,7 +147,9 @@ base_url: get("BASE_URL").unwrap_or_else(|| "https://cinema.k-labs.app".into()),
 google_client_id: get("GOOGLE_CLIENT_ID"),
 google_client_secret: get("GOOGLE_CLIENT_SECRET"),
 apple_client_id: get("APPLE_CLIENT_ID"),
-apple_client_secret: get("APPLE_CLIENT_SECRET"),
+apple_team_id: get("APPLE_TEAM_ID"),
+apple_key_id: get("APPLE_KEY_ID"),
+apple_private_key: get("APPLE_PRIVATE_KEY"),
 github_client_id: get("GITHUB_CLIENT_ID"),
 github_client_secret: get("GITHUB_CLIENT_SECRET"),
 ```
@@ -201,6 +205,14 @@ pub struct OAuthConfig {
     pub client_id: String,
     pub client_secret: String,
 }
+
+#[derive(Clone)]
+pub struct AppleConfig {
+    pub client_id: String,
+    pub team_id: String,
+    pub key_id: String,
+    pub private_key: String,
+}
 ```
 
 Extend `AppState`:
@@ -213,7 +225,7 @@ pub struct AppState {
     pub base_url: String,
     pub smtp_config: Option<SmtpConfig>,
     pub google_oauth: Option<OAuthConfig>,
-    pub apple_oauth: Option<OAuthConfig>,
+    pub apple_oauth: Option<AppleConfig>,
     pub github_oauth: Option<OAuthConfig>,
 }
 ```
@@ -552,8 +564,6 @@ use base64::Engine;
 use chrono::Utc;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
-use std::sync::Arc;
 
 use crate::web::AppState;
 
@@ -664,7 +674,7 @@ async fn get_providers(
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
-#[async_trait]
+// axum 0.8's FromRequestParts uses native `async fn` in the trait — no #[async_trait] needed
 impl<S: Sync> FromRequestParts<S> for AuthUser
 where
     AppState: axum::extract::FromRef<S>,
@@ -817,81 +827,124 @@ async fn post_logout() -> Response {
 
 Also add `use std::collections::HashMap;` to imports.
 
-- [ ] **Step 4: Implement SSO handlers (Google, Apple, GitHub)**
+- [ ] **Step 4: Implement SSO handlers (Google, Apple via openidconnect; GitHub via reqwest)**
 
 Add to imports:
 ```rust
-use oauth2::basic::BasicClient;
-use oauth2::reqwest::async_http_client;
-use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
-    TokenResponse, TokenUrl,
+use openidconnect::core::{CoreClient, CoreProviderMetadata};
+use openidconnect::reqwest::async_http_client;
+use openidconnect::{
+    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, RedirectUrl, Scope,
+    TokenResponse,
 };
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 ```
 
-Add shared OAuth state helper:
+Add a cached OIDC client helper. Google and Apple both support OpenID Connect Discovery, so we discover their metadata (auth/token/userinfo endpoints + JWKS URI) once and cache the `CoreClient`. The `CoreIdTokenVerifier` embedded in the client verifies id_token signatures against the provider's JWKS.
 
 ```rust
-fn oauth_client(
+static OIDC_CLIENTS: OnceLock<Mutex<HashMap<String, Result<CoreClient, String>>>> = OnceLock::new();
+
+fn oidc_issuer(provider: &str) -> Result<String, StatusCode> {
+    match provider {
+        "google" => Ok("https://accounts.google.com".into()),
+        "apple" => Ok("https://appleid.apple.com".into()),
+        _ => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+fn apple_client_secret(cfg: &crate::web::AppleConfig) -> Result<String, StatusCode> {
+    // Apple's client_secret is a short-lived JWT signed with the registered private key
+    let now = Utc::now();
+    let exp = now + chrono::Duration::days(180);
+    let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
+    header.kid = Some(cfg.key_id.clone());
+    let claims = serde_json::json!({
+        "iss": cfg.team_id,
+        "iat": now.timestamp(),
+        "exp": exp.timestamp(),
+        "aud": "https://appleid.apple.com",
+        "sub": cfg.client_id,
+    });
+    let key = jsonwebtoken::EncodingKey::from_ec_pem(cfg.private_key.as_bytes())
+        .map_err(|e| {
+            tracing::error!("invalid Apple private key: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    jsonwebtoken::encode(&header, &claims, &key).map_err(|e| {
+        tracing::error!("failed to sign Apple client secret: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+async fn oidc_client(
+    state: &AppState,
     provider: &str,
-    config: &crate::web::OAuthConfig,
-    base_url: &str,
-) -> BasicClient {
-    let (auth_url, token_url) = match provider {
-        "google" => (
-            "https://accounts.google.com/o/oauth2/v2/auth",
-            "https://oauth2.googleapis.com/token",
-        ),
-        "apple" => (
-            "https://appleid.apple.com/auth/authorize",
-            "https://appleid.apple.com/auth/token",
-        ),
-        "github" => (
-            "https://github.com/login/oauth/authorize",
-            "https://github.com/login/oauth/access_token",
-        ),
-        _ => unreachable!(),
+) -> Result<CoreClient, StatusCode> {
+    let (client_id, client_secret) = match provider {
+        "google" => {
+            let c = state.google_oauth.as_ref().ok_or(StatusCode::NOT_IMPLEMENTED)?;
+            (c.client_id.clone(), Some(c.client_secret.clone()))
+        }
+        "apple" => {
+            let c = state.apple_oauth.as_ref().ok_or(StatusCode::NOT_IMPLEMENTED)?;
+            (c.client_id.clone(), Some(apple_client_secret(c)?))
+        }
+        _ => return Err(StatusCode::NOT_FOUND),
     };
-    BasicClient::new(
-        ClientId::new(config.client_id.clone()),
-        Some(ClientSecret::new(config.client_secret.clone())),
-        AuthUrl::new(auth_url.to_string()).unwrap(),
-        Some(TokenUrl::new(token_url.to_string()).unwrap()),
+    let cache_key = format!("{provider}|{client_id}|{}", state.base_url);
+    let cache = OIDC_CLIENTS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(cached) = cache.lock().await.get(&cache_key) {
+        return cached.clone().map_err(|e| {
+            tracing::error!("oidc client cache hit with prior failure: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        });
+    }
+    let issuer = oidc_issuer(provider)?;
+    let metadata = CoreProviderMetadata::discover_async(
+        IssuerUrl::new(issuer).unwrap(),
+        async_http_client,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("oidc discovery failed for {provider}: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let client = CoreClient::from_provider_metadata(
+        metadata,
+        ClientId::new(client_id.clone()),
+        Some(ClientSecret::new(client_secret)),
     )
     .set_redirect_uri(
-        RedirectUrl::new(format!("{}/api/auth/sso/{}/callback", base_url, provider)).unwrap(),
-    )
+        RedirectUrl::new(format!("{}/api/auth/sso/{}/callback", state.base_url, provider)).unwrap(),
+    );
+    let mut guard = cache.lock().await;
+    guard.insert(cache_key, Ok(client.clone()));
+    Ok(client)
 }
 ```
 
-Add the SSO initiate handler (generic for all three):
+Add the SSO initiate handlers. One per provider:
 
 ```rust
-async fn sso_initiate(
-    State(state): State<AppState>,
+async fn sso_initiate_oidc(
+    state: &AppState,
     provider: &str,
 ) -> Result<Response, StatusCode> {
-    let oauth = match provider {
-        "google" => state.google_oauth.as_ref(),
-        "apple" => state.apple_oauth.as_ref(),
-        "github" => state.github_oauth.as_ref(),
-        _ => return Err(StatusCode::NOT_FOUND),
-    }
-    .ok_or(StatusCode::NOT_IMPLEMENTED)?;
-    let client = oauth_client(provider, oauth, &state.base_url);
-    let (auth_url, csrf_token) = client
-        .authorize_url(CsrfToken::new_random)
-        .add_scope(match provider {
-            "google" => Scope::new("openid email".into()),
-            "apple" => Scope::new("name email".into()),
-            "github" => Scope::new("user:email".into()),
-            _ => unreachable!(),
-        })
+    let client = oidc_client(state, provider).await?;
+    let (auth_url, csrf_token, nonce) = client
+        .authorize_url(CsrfToken::new_random, Nonce::new_random)
+        .add_scope(Scope::new("openid".to_string()))
+        .add_scope(Scope::new("email".to_string()))
+        .add_scope(Scope::new("profile".to_string()))
         .url();
+    // Store both CSRF state and nonce in the cookie so the callback can verify both
+    let state_value = format!("{}:{}", csrf_token.secret(), nonce.secret());
     let state_cookie = format!(
-        "{name}={secret}; Secure; SameSite=Lax; Path=/; Max-Age=600",
+        "{name}={value}; Secure; SameSite=Lax; Path=/; Max-Age=600",
         name = STATE_COOKIE_NAME,
-        secret = csrf_token.secret(),
+        value = state_value,
     );
     Ok(Response::builder()
         .status(StatusCode::FOUND)
@@ -900,55 +953,88 @@ async fn sso_initiate(
         .body(axum::body::Body::empty())
         .unwrap())
 }
-```
 
-But axum routes need concrete handler functions. Define three wrapper handlers:
-
-```rust
 async fn sso_google(State(state): State<AppState>) -> Result<Response, StatusCode> {
-    sso_initiate(State(state), "google").await
+    sso_initiate_oidc(&state, "google").await
 }
+
 async fn sso_apple(State(state): State<AppState>) -> Result<Response, StatusCode> {
-    sso_initiate(State(state), "apple").await
+    sso_initiate_oidc(&state, "apple").await
 }
+
 async fn sso_github(State(state): State<AppState>) -> Result<Response, StatusCode> {
-    sso_initiate(State(state), "github").await
+    let oauth = state.github_oauth.as_ref().ok_or(StatusCode::NOT_IMPLEMENTED)?;
+    let (auth_url, csrf_token) = oauth2_auth_url("github", oauth, &state.base_url);
+    let state_cookie = format!(
+        "{name}={secret}; Secure; SameSite=Lax; Path=/; Max-Age=600",
+        name = STATE_COOKIE_NAME,
+        secret = csrf_token.secret(),
+    );
+    Ok(Response::builder()
+        .status(StatusCode::FOUND)
+        .header(header::LOCATION, auth_url)
+        .header(header::SET_COOKIE, state_cookie)
+        .body(axum::body::Body::empty())
+        .unwrap())
 }
 ```
 
-Add SSO callback handler (generic):
+GitHub doesn't do OIDC, so it gets a tiny hand-rolled auth URL builder:
 
 ```rust
-async fn sso_callback(
+fn oauth2_auth_url(provider: &str, cfg: &crate::web::OAuthConfig, base_url: &str) -> (String, CsrfToken) {
+    let csrf = CsrfToken::new_random();
+    let mut params = vec![
+        ("client_id", cfg.client_id.clone()),
+        (
+            "redirect_uri",
+            format!("{base_url}/api/auth/sso/{provider}/callback"),
+        ),
+        ("scope", "user:email".to_string()),
+        ("state", csrf.secret().clone()),
+    ];
+    let query = params
+        .iter()
+        .map(|(k, v)| format!("{k}={}", urlencode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    (format!("https://github.com/login/oauth/authorize?{query}"), csrf)
+}
+
+fn urlencode(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            _ => {
+                let mut b = [0u8; 4];
+                c.encode_utf8(&mut b).bytes().map(|b| format!("%{b:02X}")).collect()
+            }
+        })
+        .collect()
+}
+```
+
+Add the OIDC callback (Google + Apple) with full id_token signature verification:
+
+```rust
+async fn sso_callback_oidc(
     State(state): State<AppState>,
     req: axum::extract::Request,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
     provider: &str,
 ) -> Result<Response, StatusCode> {
-    let oauth = match provider {
-        "google" => state.google_oauth.as_ref(),
-        "apple" => state.apple_oauth.as_ref(),
-        "github" => state.github_oauth.as_ref(),
-        _ => return Err(StatusCode::NOT_FOUND),
-    }
-    .ok_or(StatusCode::NOT_IMPLEMENTED)?;
-    // Validate CSRF state cookie
-    let cookie_header = req
-        .headers()
-        .get(header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let expected_state = cookie_header
-        .split(';')
-        .map(|s| s.trim())
-        .find_map(|c| c.strip_prefix(&format!("{STATE_COOKIE_NAME}=")))
-        .map(|t| t.to_string());
-    let code = params.get("code").cloned().unwrap_or_default();
+    // Validate CSRF state + nonce from cookie (stored as "csrf:nonce")
+    let cookie_state = read_cookie(&req, STATE_COOKIE_NAME);
+    let (expected_csrf, expected_nonce) = cookie_state
+        .and_then(|v| v.split_once(':'))
+        .map(|(c, n)| (c.to_string(), n.to_string()))
+        .unwrap_or_default();
     let state_param = params.get("state").cloned().unwrap_or_default();
-    if state_param.is_empty() || expected_state.as_deref() != Some(&state_param) {
+    if state_param.is_empty() || expected_csrf.is_empty() || state_param != expected_csrf {
         return Ok(Redirect::to(&format!("{}/?error=invalid_state", state.base_url)));
     }
-    let client = oauth_client(provider, oauth, &state.base_url);
+    let client = oidc_client(&state, provider).await?;
+    let code = params.get("code").cloned().unwrap_or_default();
     let token_res = client
         .exchange_code(AuthorizationCode::new(code))
         .request_async(async_http_client)
@@ -957,82 +1043,120 @@ async fn sso_callback(
             tracing::error!("oauth token exchange failed for {provider}: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    // Fetch user identity
-    let (provider_id, email) = match provider {
-        "google" => {
-            let http = reqwest::Client::new();
-            let user_info: serde_json::Value = http
-                .get("https://openidconnect.googleapis.com/v1/userinfo")
-                .bearer_auth(token_res.access_token().secret())
-                .send()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .json()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let sub = user_info["sub"].as_str().unwrap_or("").to_string();
-            let email_verified = user_info["email_verified"].as_bool().unwrap_or(false);
-            if !email_verified {
-                return Ok(Redirect::to(&format!("{}/?error=email_not_verified", state.base_url)));
-            }
-            let email = user_info["email"].as_str().unwrap_or("").to_string();
-            (sub, email)
-        }
-        "apple" => {
-            // Apple: sub and email come from id_token
-            let id_token = token_res
-                .extra_fields()
-                .get("id_token")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            // Decode without verification (we don't have the Apple public key set up client-side;
-            // the token was obtained via a direct TLS-secured backchannel, so it's trusted enough
-            // for this low-stakes app)
-            let header = jsonwebtoken::decode_header(id_token)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let decoding = jsonwebtoken::dangerous_insecure_decode::<serde_json::Value>(id_token)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let claims = &decoding.claims;
-            let sub = claims["sub"].as_str().unwrap_or("").to_string();
-            let email = claims["email"].as_str().map(|s| s.to_string());
-            // Apple only returns email on first login; store whatever we have
-            let email = email.unwrap_or_else(|| format!("apple-{sub}@unknown"));
-            (sub, email)
-        }
-        "github" => {
-            let http = reqwest::Client::new();
-            let user: serde_json::Value = http
-                .get("https://api.github.com/user")
-                .header("User-Agent", "ov-kino-linz")
-                .bearer_auth(token_res.access_token().secret())
-                .send()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .json()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let id = user["id"].as_i64().unwrap_or(0).to_string();
-            // Try to get verified primary email
-            let emails: Vec<serde_json::Value> = http
-                .get("https://api.github.com/user/emails")
-                .header("User-Agent", "ov-kino-linz")
-                .bearer_auth(token_res.access_token().secret())
-                .send()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .json()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let email = emails
-                .iter()
-                .find(|e| e["primary"].as_bool() == Some(true) && e["verified"].as_bool() == Some(true))
-                .and_then(|e| e["email"].as_str())
-                .unwrap_or("");
-            (id, email.to_string())
-        }
-        _ => unreachable!(),
-    };
-    let user_id = db::find_or_create_user(&state.pool, provider, &provider_id, &email)
+    // Extract and verify the id_token signature against the provider JWKS
+    let id_token = token_res.id_token().ok_or_else(|| {
+        tracing::error!("no id_token returned by {provider}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let nonce = Nonce::new(expected_nonce);
+    let claims = id_token
+        .claims(&client.id_token_verifier(), &Some(nonce))
+        .map_err(|e| {
+            tracing::error!("id_token verification failed for {provider}: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    let sub = claims.subject().to_string();
+    // Apple only returns email on the first login; store whatever we have
+    let email = claims
+        .email()
+        .map(|e| e.as_str().to_string())
+        .unwrap_or_else(|| format!("{provider}-{sub}@unknown"));
+    let user_id = db::find_or_create_user(&state.pool, provider, &sub, &email)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let session_token = new_token();
+    let expires = Utc::now() + chrono::Duration::days(SESSION_DAYS);
+    db::create_session(&state.pool, user_id, &session_token, expires)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Redirect::to(&state.base_url).with_header(
+        header::SET_COOKIE,
+        build_session_cookie(&session_token),
+    ))
+}
+
+async fn sso_google_callback(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+    Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<Response, StatusCode> {
+    sso_callback_oidc(State(state), req, Query(params), "google").await
+}
+
+async fn sso_apple_callback(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+    Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<Response, StatusCode> {
+    sso_callback_oidc(State(state), req, Query(params), "apple").await
+}
+```
+
+Add the GitHub callback (manual OAuth2 — token exchange + `/user` + `/user/emails`):
+
+```rust
+async fn sso_github_callback(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<Response, StatusCode> {
+    let oauth = state.github_oauth.as_ref().ok_or(StatusCode::NOT_IMPLEMENTED)?;
+    let expected_state = read_cookie(&req, STATE_COOKIE_NAME);
+    let state_param = params.get("state").cloned().unwrap_or_default();
+    if state_param.is_empty() || expected_state.as_deref() != Some(state_param.as_str()) {
+        return Ok(Redirect::to(&format!("{}/?error=invalid_state", state.base_url)));
+    }
+    let code = params.get("code").cloned().unwrap_or_default();
+    let http = reqwest::Client::new();
+    // Exchange code for access token
+    let token_resp: serde_json::Value = http
+        .post("https://github.com/login/oauth/access_token")
+        .header("Accept", "application/json")
+        .form(&[
+            ("client_id", oauth.client_id.clone()),
+            ("client_secret", oauth.client_secret.clone()),
+            ("code", code.clone()),
+        ])
+        .send()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .json()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let access_token = token_resp["access_token"].as_str().unwrap_or("").to_string();
+    if access_token.is_empty() {
+        return Ok(Redirect::to(&format!("{}/?error=oauth_failed", state.base_url)));
+    }
+    // Fetch the user's numeric id
+    let user: serde_json::Value = http
+        .get("https://api.github.com/user")
+        .header("User-Agent", "ov-kino-linz")
+        .bearer_auth(&access_token)
+        .send()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .json()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let id = user["id"].as_i64().unwrap_or(0).to_string();
+    // Fetch verified primary email
+    let emails: Vec<serde_json::Value> = http
+        .get("https://api.github.com/user/emails")
+        .header("User-Agent", "ov-kino-linz")
+        .bearer_auth(&access_token)
+        .send()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .json()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let email = emails
+        .iter()
+        .find(|e| e["primary"].as_bool() == Some(true) && e["verified"].as_bool() == Some(true))
+        .and_then(|e| e["email"].as_str())
+        .unwrap_or("")
+        .to_string();
+    let user_id = db::find_or_create_user(&state.pool, "github", &id, &email)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session_token = new_token();
@@ -1047,29 +1171,20 @@ async fn sso_callback(
 }
 ```
 
-Add wrapper handlers for each callback:
+Add a shared cookie-reading helper (also used by the logout handler if it ever needs the token):
 
 ```rust
-async fn sso_google_callback(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-    Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Result<Response, StatusCode> {
-    sso_callback(State(state), req, Query(params), "google").await
-}
-async fn sso_apple_callback(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-    Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Result<Response, StatusCode> {
-    sso_callback(State(state), req, Query(params), "apple").await
-}
-async fn sso_github_callback(
-    State(state): State<AppState>,
-    req: axum::extract::Request,
-    Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Result<Response, StatusCode> {
-    sso_callback(State(state), req, Query(params), "github").await
+fn read_cookie(req: &axum::extract::Request, name: &str) -> Option<String> {
+    req.headers()
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookie| {
+            cookie
+                .split(';')
+                .map(|s| s.trim())
+                .find_map(|c| c.strip_prefix(&format!("{name}=")))
+                .map(|t| t.to_string())
+        })
 }
 ```
 
@@ -1274,10 +1389,17 @@ let state = web::AppState {
         }),
         _ => None,
     },
-    apple_oauth: match (&config.apple_client_id, &config.apple_client_secret) {
-        (Some(id), Some(secret)) => Some(web::OAuthConfig {
+    apple_oauth: match (
+        &config.apple_client_id,
+        &config.apple_team_id,
+        &config.apple_key_id,
+        &config.apple_private_key,
+    ) {
+        (Some(id), Some(team_id), Some(key_id), Some(private_key)) => Some(web::AppleConfig {
             client_id: id.clone(),
-            client_secret: secret.clone(),
+            team_id: team_id.clone(),
+            key_id: key_id.clone(),
+            private_key: private_key.clone(),
         }),
         _ => None,
     },
@@ -1869,6 +1991,152 @@ Expected: All pass including new auth tests
 ```bash
 git add frontend/src/locales/en.json frontend/src/locales/de.json frontend/src/components/Marquee.test.tsx
 git commit -m "feat: add auth translations and Marquee auth test"
+```
+
+---
+
+### Task 9: Helm chart — auth secrets + config
+
+**Files:**
+- Modify: `helm/ov-watcher/values.yaml` (secrets block)
+- Modify: `helm/ov-watcher/templates/secret.yaml`
+- Modify: `helm/ov-watcher/templates/configmap.yaml`
+
+**Interfaces:**
+- Consumes: env var names from Task 2 (`GOOGLE_CLIENT_ID`, `APPLE_TEAM_ID`, `SMTP_*`, etc.)
+- Produces: Values `secrets.googleClientId`, `secrets.googleClientSecret`, `secrets.appleClientId`, `secrets.appleTeamId`, `secrets.appleKeyId`, `secrets.applePrivateKey`, `secrets.githubClientId`, `secrets.githubClientSecret`, `secrets.smtpPassword`; config `config.smtpHost`, `config.smtpPort`, `config.smtpUsername`, `config.smtpFrom`, `config.baseUrl`
+
+- [ ] **Step 1: Add new secrets to values.yaml**
+
+In `helm/ov-watcher/values.yaml`, extend the `secrets:` block:
+
+```yaml
+secrets:
+  telegramBotToken: ""
+  # Öffentlicher Kanal: Chat-ID ist der @-Name (Bot muss Kanal-Admin sein).
+  telegramChatId: "@ov_linz"
+  databaseUrl: ""     # only used when postgres.create=false
+  googleClientId: ""
+  googleClientSecret: ""
+  appleClientId: ""
+  appleTeamId: ""
+  appleKeyId: ""
+  applePrivateKey: ""
+  githubClientId: ""
+  githubClientSecret: ""
+  smtpPassword: ""
+```
+
+- [ ] **Step 2: Add non-secret auth config to configmap.yaml**
+
+In `helm/ov-watcher/templates/configmap.yaml`, extend the `data:` block:
+
+```yaml
+  CHECK_INTERVAL_HOURS: "{{ .Values.config.checkIntervalHours }}"
+  SOURCES: "{{ .Values.config.sources }}"
+  BASE_URL: "https://{{ .Values.ingress.host }}"
+  SMTP_HOST: "{{ .Values.config.smtpHost }}"
+  SMTP_PORT: "{{ .Values.config.smtpPort }}"
+  SMTP_USERNAME: "{{ .Values.config.smtpUsername }}"
+  SMTP_FROM: "{{ .Values.config.smtpFrom }}"
+```
+
+(Leave SMTP_HOST/USERNAME/FROM empty-string if not configured — the app treats empty as disabled.)
+
+- [ ] **Step 3: Add secret env vars to secret.yaml**
+
+In `helm/ov-watcher/templates/secret.yaml`, add the auth secrets to `stringData`:
+
+```yaml
+stringData:
+  TELEGRAM_BOT_TOKEN: "{{ .Values.secrets.telegramBotToken }}"
+  TELEGRAM_CHAT_ID: "{{ .Values.secrets.telegramChatId }}"
+  GOOGLE_CLIENT_ID: "{{ .Values.secrets.googleClientId }}"
+  GOOGLE_CLIENT_SECRET: "{{ .Values.secrets.googleClientSecret }}"
+  APPLE_CLIENT_ID: "{{ .Values.secrets.appleClientId }}"
+  APPLE_TEAM_ID: "{{ .Values.secrets.appleTeamId }}"
+  APPLE_KEY_ID: "{{ .Values.secrets.appleKeyId }}"
+  APPLE_PRIVATE_KEY: "{{ .Values.secrets.applePrivateKey }}"
+  GITHUB_CLIENT_ID: "{{ .Values.secrets.githubClientId }}"
+  GITHUB_CLIENT_SECRET: "{{ .Values.secrets.githubClientSecret }}"
+  SMTP_PASSWORD: "{{ .Values.secrets.smtpPassword }}"
+```
+
+- [ ] **Step 4: Add smtpHost/Port/Username/From to values.yaml config block**
+
+```yaml
+config:
+  checkIntervalHours: "3"
+  sources: "cineplexx,megaplex"
+  smtpHost: ""
+  smtpPort: "587"
+  smtpUsername: ""
+  smtpFrom: ""
+```
+
+- [ ] **Step 5: Verify the chart renders**
+
+Run: `cd helm/ov-watcher && helm template ov-watcher . --set postgres.password=test --set secrets.telegramBotToken=x --set secrets.googleClientId=x --set secrets.smtpPassword=x > /dev/null`
+Expected: No errors
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add helm/ov-watcher/values.yaml helm/ov-watcher/templates/secret.yaml helm/ov-watcher/templates/configmap.yaml
+git commit -m "feat: add auth secrets and config to helm chart"
+```
+
+---
+
+### Task 10: CI deploy workflow — pass auth secrets
+
+**Files:**
+- Modify: `.github/workflows/deploy.yml:132-138`
+
+**Interfaces:**
+- Consumes: GitHub repo secrets (must be added manually): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`
+
+- [ ] **Step 1: Pass the new secrets in the helm upgrade command**
+
+Replace the `helm upgrade --install` block with:
+
+```yaml
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install ov-watcher ./helm/ov-watcher \
+            --namespace default \
+            --set image.tag=${{ steps.tag.outputs.sha }} \
+            --set secrets.telegramBotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            --set secrets.googleClientId="${{ secrets.GOOGLE_CLIENT_ID }}" \
+            --set secrets.googleClientSecret="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            --set secrets.appleClientId="${{ secrets.APPLE_CLIENT_ID }}" \
+            --set secrets.appleTeamId="${{ secrets.APPLE_TEAM_ID }}" \
+            --set secrets.appleKeyId="${{ secrets.APPLE_KEY_ID }}" \
+            --set secrets.applePrivateKey="${{ secrets.APPLE_PRIVATE_KEY }}" \
+            --set secrets.githubClientId="${{ secrets.GITHUB_CLIENT_ID }}" \
+            --set secrets.githubClientSecret="${{ secrets.GITHUB_CLIENT_SECRET }}" \
+            --set secrets.smtpPassword="${{ secrets.SMTP_PASSWORD }}" \
+            --set config.smtpHost="${{ secrets.SMTP_HOST }}" \
+            --set config.smtpPort="${{ secrets.SMTP_PORT }}" \
+            --set config.smtpUsername="${{ secrets.SMTP_USERNAME }}" \
+            --set config.smtpFrom="${{ secrets.SMTP_FROM }}" \
+            --set postgres.password="${{ secrets.POSTGRES_PASSWORD }}"
+```
+
+- [ ] **Step 2: Document the new GitHub repo secrets**
+
+In `AGENTS.md`, update the "GitHub secrets" bullet to include the new auth secrets (see Global Constraints for the full list).
+
+- [ ] **Step 3: Verify YAML validity**
+
+Run: `python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/deploy.yml')); print('ok')"`
+Expected: `ok`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github/workflows/deploy.yml AGENTS.md
+git commit -m "ci: pass auth secrets to helm deploy"
 ```
 
 ---

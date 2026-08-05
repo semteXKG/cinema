@@ -53,8 +53,10 @@ New `Config` fields (all optional, auth features degrade gracefully when absent)
 base_url:              String,          // BASE_URL, default "https://cinema.k-labs.app"
 google_client_id:      Option<String>,  // GOOGLE_CLIENT_ID
 google_client_secret:  Option<String>,  // GOOGLE_CLIENT_SECRET
-apple_client_id:       Option<String>,  // APPLE_CLIENT_ID
-apple_client_secret:   Option<String>,  // APPLE_CLIENT_SECRET
+apple_client_id:       Option<String>,  // APPLE_CLIENT_ID (Service ID)
+apple_team_id:         Option<String>,  // APPLE_TEAM_ID
+apple_key_id:          Option<String>,  // APPLE_KEY_ID
+apple_private_key:     Option<String>,  // APPLE_PRIVATE_KEY (ES256 private key PEM)
 github_client_id:      Option<String>,  // GITHUB_CLIENT_ID
 github_client_secret:  Option<String>,  // GITHUB_CLIENT_SECRET
 smtp_host:             Option<String>,  // SMTP_HOST
@@ -63,6 +65,8 @@ smtp_username:         Option<String>,  // SMTP_USERNAME
 smtp_password:         Option<String>,  // SMTP_PASSWORD
 smtp_from:             Option<String>,  // SMTP_FROM
 ```
+
+Apple's `client_secret` is not a static string — it's a JWT (ES256) signed with the private key, with `iss=team_id`, `sub=client_id`, `aud=appleid.apple.com`, 180-day expiry, generated at runtime via `jsonwebtoken`.
 
 ## API Endpoints
 
@@ -108,7 +112,9 @@ All three follow the same OAuth2 authorization code flow. Provider-specific deta
 
 4. Create/link user and identity `(provider={provider}, provider_id=...)`, create session, set cookie, redirect to `/`.
 
-**Apple notes:** Apple's OAuth differs slightly — the `id_token` carries the user identity, and `email` is only present on the initial authorization. Store it on first login; subsequent logins should look up the existing identity by `sub`. Apple requires registering a Service ID and a private key for client secret generation (JWT-signed).
+**Library choice:** Google and Apple use the `openidconnect` crate — it does discovery, auth-code URL building, token exchange, id_token/JWKS signature verification, and UserInfo in one dependency (it wraps `oauth2`). GitHub is plain OAuth2 (no OIDC discovery/JWKS), so its `/user` + `/user/emails` calls are manual `reqwest`.
+
+**Apple notes:** Apple is a standard OIDC provider — discovery at `https://appleid.apple.com/.well-known/openid-configuration`, JWKS at `https://appleid.apple.com/auth/keys`. The id_token signature is verified against Apple's JWKS (via `openidconnect`'s `CoreIdTokenVerifier`), and its `sub` claim is the identity. `email` is only present on the initial authorization — store it on first login; subsequent logins look up the existing identity by `sub`. Apple requires registering a Service ID and a private key for client secret generation (JWT-signed via `jsonwebtoken`).
 
 ### Session cookie
 
@@ -140,12 +146,12 @@ Both login options live in the `<Marquee>` header area (a small text link or ico
 ## Implementation notes
 
 - New Rust crate dependency: `lettre` for SMTP email sending
-- New Rust crate dependency: `oauth2` for OAuth2 clients (Google, Apple, GitHub)
+- New Rust crate dependency: `openidconnect` for Google + Apple (OIDC discovery, token exchange, id_token/JWKS verification)
 - New Rust crate dependency: `jsonwebtoken` for Apple client secret JWT generation
 - No new frontend npm dependencies needed
 - Session cleanup: a periodic task prune expired sessions (runs alongside the checker loop, e.g. once per hour)
 - Auth is optional: each login method is only available if its corresponding env vars are configured. Unconfigured methods are hidden from the frontend and their endpoints return `501 Not Implemented`
-- Helmet/production: Helm chart gains new `secrets` fields: `googleClientId`, `googleClientSecret`, `appleClientId`, `appleClientSecret`, `githubClientId`, `githubClientSecret`, `smtpPassword`. SMTP config added to ConfigMap.
+- Helmet/production: Helm chart gains new `secrets` fields: `googleClientId`, `googleClientSecret`, `appleClientId`, `appleTeamId`, `appleKeyId`, `applePrivateKey`, `githubClientId`, `githubClientSecret`, `smtpPassword`. SMTP config added to ConfigMap.
 
 ## Out of scope (future specs)
 
