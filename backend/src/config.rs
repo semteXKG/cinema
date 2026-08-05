@@ -11,6 +11,20 @@ pub struct Config {
     pub port: u16,
     pub database_url: String,
     pub static_dir: PathBuf,
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_from: Option<String>,
+    pub base_url: String,
+    pub google_client_id: Option<String>,
+    pub google_client_secret: Option<String>,
+    pub apple_client_id: Option<String>,
+    pub apple_team_id: Option<String>,
+    pub apple_key_id: Option<String>,
+    pub apple_private_key: Option<String>,
+    pub github_client_id: Option<String>,
+    pub github_client_secret: Option<String>,
 }
 
 impl Config {
@@ -40,6 +54,10 @@ impl Config {
             .unwrap_or_else(|| "8080".into())
             .parse()
             .map_err(|_| anyhow::anyhow!("PORT must be a number"))?;
+        let smtp_port: u16 = get("SMTP_PORT")
+            .unwrap_or_else(|| "587".into())
+            .parse()
+            .map_err(|_| anyhow::anyhow!("SMTP_PORT must be a number"))?;
         Ok(Config {
             telegram_token: get("TELEGRAM_BOT_TOKEN"),
             telegram_chat_id: get("TELEGRAM_CHAT_ID"),
@@ -51,6 +69,20 @@ impl Config {
             static_dir: PathBuf::from(
                 get("STATIC_DIR").unwrap_or_else(|| "./frontend/dist".into()),
             ),
+            smtp_host: get("SMTP_HOST"),
+            smtp_port,
+            smtp_username: get("SMTP_USERNAME"),
+            smtp_password: get("SMTP_PASSWORD"),
+            smtp_from: get("SMTP_FROM"),
+            base_url: get("BASE_URL").unwrap_or_else(|| "https://cinema.k-labs.app".into()),
+            google_client_id: get("GOOGLE_CLIENT_ID"),
+            google_client_secret: get("GOOGLE_CLIENT_SECRET"),
+            apple_client_id: get("APPLE_CLIENT_ID"),
+            apple_team_id: get("APPLE_TEAM_ID"),
+            apple_key_id: get("APPLE_KEY_ID"),
+            apple_private_key: get("APPLE_PRIVATE_KEY"),
+            github_client_id: get("GITHUB_CLIENT_ID"),
+            github_client_secret: get("GITHUB_CLIENT_SECRET"),
         })
     }
 }
@@ -77,6 +109,11 @@ mod tests {
         assert_eq!(cfg.static_dir, PathBuf::from("./frontend/dist"));
         assert_eq!(cfg.port, 8080);
         assert_eq!(cfg.telegram_token, None);
+        assert_eq!(cfg.smtp_port, 587);
+        assert_eq!(cfg.smtp_host, None);
+        assert_eq!(cfg.smtp_from, None);
+        assert_eq!(cfg.base_url, "https://cinema.k-labs.app");
+        assert_eq!(cfg.google_client_id, None);
     }
 
     #[test]
@@ -90,6 +127,18 @@ mod tests {
             ("DATA_DIR", "/data"),
             ("PORT", "9090"),
             ("STATIC_DIR", "/srv/static"),
+            ("SMTP_HOST", "smtp.example.com"),
+            ("SMTP_PORT", "465"),
+            ("SMTP_FROM", "OV-Kino <noreply@k-labs.app>"),
+            ("BASE_URL", "http://localhost:8080"),
+            ("GOOGLE_CLIENT_ID", "gcid"),
+            ("GOOGLE_CLIENT_SECRET", "gcs"),
+            ("APPLE_CLIENT_ID", "acid"),
+            ("APPLE_TEAM_ID", "atid"),
+            ("APPLE_KEY_ID", "akid"),
+            ("APPLE_PRIVATE_KEY", "apk"),
+            ("GITHUB_CLIENT_ID", "ghcid"),
+            ("GITHUB_CLIENT_SECRET", "ghcs"),
         ]))
         .unwrap();
         assert_eq!(cfg.telegram_token.as_deref(), Some("T"));
@@ -98,6 +147,21 @@ mod tests {
         assert_eq!(cfg.check_interval, Duration::from_secs(5400));
         assert_eq!(cfg.data_dir, PathBuf::from("/data"));
         assert_eq!(cfg.port, 9090);
+        assert_eq!(cfg.smtp_host.as_deref(), Some("smtp.example.com"));
+        assert_eq!(cfg.smtp_port, 465);
+        assert_eq!(
+            cfg.smtp_from.as_deref(),
+            Some("OV-Kino <noreply@k-labs.app>")
+        );
+        assert_eq!(cfg.base_url, "http://localhost:8080");
+        assert_eq!(cfg.google_client_id.as_deref(), Some("gcid"));
+        assert_eq!(cfg.google_client_secret.as_deref(), Some("gcs"));
+        assert_eq!(cfg.apple_client_id.as_deref(), Some("acid"));
+        assert_eq!(cfg.apple_team_id.as_deref(), Some("atid"));
+        assert_eq!(cfg.apple_key_id.as_deref(), Some("akid"));
+        assert_eq!(cfg.apple_private_key.as_deref(), Some("apk"));
+        assert_eq!(cfg.github_client_id.as_deref(), Some("ghcid"));
+        assert_eq!(cfg.github_client_secret.as_deref(), Some("ghcs"));
     }
 
     #[test]
@@ -108,6 +172,15 @@ mod tests {
     #[test]
     fn invalid_port_is_an_error() {
         let cfg = Config::from_lookup(env_of(&[("DATABASE_URL", "postgres://x"), ("PORT", "abc")]));
+        assert!(cfg.is_err());
+    }
+
+    #[test]
+    fn invalid_smtp_port_is_an_error() {
+        let cfg = Config::from_lookup(env_of(&[
+            ("DATABASE_URL", "postgres://x"),
+            ("SMTP_PORT", "abc"),
+        ]));
         assert!(cfg.is_err());
     }
 

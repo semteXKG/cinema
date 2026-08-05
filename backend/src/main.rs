@@ -88,10 +88,50 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    let smtp_config = match (&config.smtp_host, &config.smtp_password, &config.smtp_from) {
+        (Some(host), Some(password), Some(from)) => Some(web::SmtpConfig {
+            host: host.clone(),
+            port: config.smtp_port,
+            username: config.smtp_username.clone(),
+            password: password.clone(),
+            from: from.clone(),
+        }),
+        _ => None,
+    };
     let state = web::AppState {
-        pool,
+        pool: pool.clone(),
         data_dir: config.data_dir.clone(),
         static_dir: config.static_dir.clone(),
+        base_url: config.base_url.clone(),
+        smtp_config,
+        google_oauth: match (&config.google_client_id, &config.google_client_secret) {
+            (Some(id), Some(secret)) => Some(web::OAuthConfig {
+                client_id: id.clone(),
+                client_secret: secret.clone(),
+            }),
+            _ => None,
+        },
+        apple_oauth: match (
+            &config.apple_client_id,
+            &config.apple_team_id,
+            &config.apple_key_id,
+            &config.apple_private_key,
+        ) {
+            (Some(id), Some(team_id), Some(key_id), Some(private_key)) => Some(web::AppleConfig {
+                client_id: id.clone(),
+                team_id: team_id.clone(),
+                key_id: key_id.clone(),
+                private_key: private_key.clone(),
+            }),
+            _ => None,
+        },
+        github_oauth: match (&config.github_client_id, &config.github_client_secret) {
+            (Some(id), Some(secret)) => Some(web::OAuthConfig {
+                client_id: id.clone(),
+                client_secret: secret.clone(),
+            }),
+            _ => None,
+        },
     };
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!("starting web server on port {}", config.port);

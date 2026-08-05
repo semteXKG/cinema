@@ -335,6 +335,20 @@ mod tests {
             port: 8080,
             database_url: String::new(),
             static_dir: std::path::PathBuf::new(),
+            smtp_host: None,
+            smtp_port: 587,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_from: None,
+            base_url: "https://cinema.k-labs.app".into(),
+            google_client_id: None,
+            google_client_secret: None,
+            apple_client_id: None,
+            apple_team_id: None,
+            apple_key_id: None,
+            apple_private_key: None,
+            github_client_id: None,
+            github_client_secret: None,
         }
     }
 

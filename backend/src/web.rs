@@ -6,10 +6,38 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Clone)]
+pub struct SmtpConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: Option<String>,
+    pub password: String,
+    pub from: String,
+}
+
+#[derive(Clone)]
+pub struct OAuthConfig {
+    pub client_id: String,
+    pub client_secret: String,
+}
+
+#[derive(Clone)]
+pub struct AppleConfig {
+    pub client_id: String,
+    pub team_id: String,
+    pub key_id: String,
+    pub private_key: String,
+}
+
+#[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
     pub data_dir: PathBuf,
     pub static_dir: PathBuf,
+    pub base_url: String,
+    pub smtp_config: Option<SmtpConfig>,
+    pub google_oauth: Option<OAuthConfig>,
+    pub apple_oauth: Option<AppleConfig>,
+    pub github_oauth: Option<OAuthConfig>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -400,6 +428,11 @@ mod tests {
             pool: pool.clone(),
             data_dir: PathBuf::new(),
             static_dir: PathBuf::from("/nonexistent"),
+            base_url: "http://localhost".into(),
+            smtp_config: None,
+            google_oauth: None,
+            apple_oauth: None,
+            github_oauth: None,
         };
         let app = router(state);
         // state 1: no check run yet -> nulls
@@ -484,6 +517,11 @@ mod tests {
             pool,
             data_dir: PathBuf::new(),
             static_dir: PathBuf::from("/nonexistent"),
+            base_url: "http://localhost".into(),
+            smtp_config: None,
+            google_oauth: None,
+            apple_oauth: None,
+            github_oauth: None,
         };
         let resp = router(state)
             .oneshot(
@@ -518,6 +556,11 @@ mod tests {
             pool,
             data_dir: dir.path().to_path_buf(),
             static_dir: PathBuf::from("/nonexistent"),
+            base_url: "http://localhost".into(),
+            smtp_config: None,
+            google_oauth: None,
+            apple_oauth: None,
+            github_oauth: None,
         };
         let app = router(state);
         let resp = app
@@ -575,6 +618,11 @@ mod tests {
             pool,
             data_dir: PathBuf::new(),
             static_dir: PathBuf::from("/nonexistent"),
+            base_url: "http://localhost".into(),
+            smtp_config: None,
+            google_oauth: None,
+            apple_oauth: None,
+            github_oauth: None,
         };
         let resp = router(state)
             .oneshot(
