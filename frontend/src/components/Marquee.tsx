@@ -13,9 +13,11 @@ export function Marquee() {
           src="/projector-logo.svg"
           alt=""
         />
-        <h1>{t("brand")}</h1>
+        <div className="marquee-text">
+          <h1>{t("brand")}</h1>
+          <p className="tagline">{t("tagline")}</p>
+        </div>
       </div>
-      <p className="tagline">{t("tagline")}</p>
       <nav className="marqnav">
         <NavLink to="/">{t("nav.home")}</NavLink>
         <NavLink to="/impressum">{t("nav.impressum")}</NavLink>
