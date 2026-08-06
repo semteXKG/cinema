@@ -22,3 +22,15 @@ export interface ApiPayload {
   sources: Record<string, string> | null;
   cinemas: CinemaView[] | null;
 }
+
+export interface AuthUser {
+  id: number;
+  email: string;
+}
+
+export interface AuthProviders {
+  email: boolean;
+  google: boolean;
+  apple: boolean;
+  github: boolean;
+}
