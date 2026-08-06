@@ -5,3 +5,8 @@ metadata:
 data:
   CHECK_INTERVAL_HOURS: "{{ .Values.config.checkIntervalHours }}"
   SOURCES: "{{ .Values.config.sources }}"
+  BASE_URL: "https://{{ .Values.ingress.host }}"
+  SMTP_HOST: "{{ .Values.config.smtpHost }}"
+  SMTP_PORT: "{{ .Values.config.smtpPort }}"
+  SMTP_USERNAME: "{{ .Values.config.smtpUsername }}"
+  SMTP_FROM: "{{ .Values.config.smtpFrom }}"

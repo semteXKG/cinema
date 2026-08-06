@@ -12,12 +12,25 @@ persistence:
 config:
   checkIntervalHours: "3"
   sources: "cineplexx,megaplex"
+  smtpHost: ""
+  smtpPort: "587"
+  smtpUsername: ""
+  smtpFrom: ""
 
 secrets:
   telegramBotToken: ""
   # Öffentlicher Kanal: Chat-ID ist der @-Name (Bot muss Kanal-Admin sein).
   telegramChatId: "@ov_linz"
   databaseUrl: ""     # only used when postgres.create=false
+  googleClientId: ""
+  googleClientSecret: ""
+  appleClientId: ""
+  appleTeamId: ""
+  appleKeyId: ""
+  applePrivateKey: ""
+  githubClientId: ""
+  githubClientSecret: ""
+  smtpPassword: ""
 
 resources:
   requests:
