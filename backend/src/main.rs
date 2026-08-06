@@ -92,6 +92,19 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                if let Err(e) = db::prune_expired_sessions(&pool).await {
+                    tracing::error!("session cleanup failed: {e}");
+                }
+            }
+        });
+    }
+
     let smtp_config = match (&config.smtp_host, &config.smtp_password, &config.smtp_from) {
         (Some(host), Some(password), Some(from)) => Some(web::SmtpConfig {
             host: host.clone(),
