@@ -135,6 +135,19 @@ jobs:
             --namespace default \
             --set image.tag=${{ steps.tag.outputs.sha }} \
             --set secrets.telegramBotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            --set secrets.googleClientId="${{ secrets.GOOGLE_CLIENT_ID }}" \
+            --set secrets.googleClientSecret="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            --set secrets.appleClientId="${{ secrets.APPLE_CLIENT_ID }}" \
+            --set secrets.appleTeamId="${{ secrets.APPLE_TEAM_ID }}" \
+            --set secrets.appleKeyId="${{ secrets.APPLE_KEY_ID }}" \
+            --set secrets.applePrivateKey="${{ secrets.APPLE_PRIVATE_KEY }}" \
+            --set secrets.githubClientId="${{ secrets.GITHUB_CLIENT_ID }}" \
+            --set secrets.githubClientSecret="${{ secrets.GITHUB_CLIENT_SECRET }}" \
+            --set secrets.smtpPassword="${{ secrets.SMTP_PASSWORD }}" \
+            --set config.smtpHost="${{ secrets.SMTP_HOST }}" \
+            --set config.smtpPort="${{ secrets.SMTP_PORT }}" \
+            --set config.smtpUsername="${{ secrets.SMTP_USERNAME }}" \
+            --set config.smtpFrom="${{ secrets.SMTP_FROM }}" \
             --set postgres.password="${{ secrets.POSTGRES_PASSWORD }}"
 
       - name: Verify rollout
