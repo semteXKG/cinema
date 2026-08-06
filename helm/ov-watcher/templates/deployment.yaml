@@ -15,6 +15,10 @@ spec:
     metadata:
       labels:
         app: ov-watcher
+      annotations:
+        # Opt out of Datadog APM init-container injection: ~2.5 min of
+        # per-language lib init containers made the 120s rollout timeout fail.
+        admission.datadoghq.com/enabled: "false"
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
