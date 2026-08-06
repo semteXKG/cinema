@@ -148,3 +148,20 @@
  .impressum p{line-height:1.6}
  .impressum .small{color:var(--dim);font-size:.85rem;max-width:60ch}
  .impressum a{color:var(--gold)}
+ .auth-btn{background:none;border:1px solid var(--edge);color:var(--dim);
+  border-radius:4px;padding:.15rem .5rem;font-size:.75rem;cursor:pointer}
+ .auth-btn:hover{color:var(--gold);border-color:var(--gold)}
+ .auth-panel{text-align:center;padding:.8rem 1rem;margin-top:.5rem;
+  border-top:1px dashed var(--edge);display:flex;flex-wrap:wrap;gap:.4rem;
+  justify-content:center;align-items:center}
+ .auth-panel form{display:flex;gap:.4rem;align-items:center}
+ .auth-input{background:var(--bg);border:1px solid var(--edge);color:var(--text);
+  border-radius:4px;padding:.3rem .5rem;font-size:.8rem;width:200px}
+ .auth-input::placeholder{color:var(--faint)}
+ .auth-submit{background:var(--gold);color:#221a0c;border:none;border-radius:4px;
+  padding:.3rem .7rem;font-size:.75rem;font-weight:700;cursor:pointer;
+  box-shadow:0 0 8px rgba(232,179,77,.35)}
+ .auth-submit:hover{background:var(--gold-bright)}
+ .auth-sso{background:var(--panel);border:1px solid var(--edge);color:var(--text);
+  border-radius:4px;padding:.3rem .7rem;font-size:.75rem;cursor:pointer}
+ .auth-sso:hover{border-color:var(--gold);color:var(--gold)}
