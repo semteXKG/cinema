@@ -1,6 +1,14 @@
 {
   "brand": "OV Kino Linz",
   "tagline": "Originalfassungen in Linz",
+  "auth": {
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "emailPlaceholder": "deine@email.com",
+    "sendLink": "Link senden",
+    "emailSent": "Prüfe deine E-Mails!",
+    "signInWith": "Anmelden mit {{provider}}"
+  },
   "sidebar": {
     "telegram": "Benachrichtigung über neue OV-Vorstellungen auf Telegram",
     "telegramSub": "Kanal: @ov_linz — gratis, kein Spam, nur neue Vorstellungen.",

@@ -26,7 +26,13 @@ const payload = {
 };
 
 function mockFetch(body: unknown) {
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => body })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("/api/auth")) return { ok: false, status: 401 };
+      return { ok: true, json: async () => body };
+    })
+  );
 }
 
 function renderAt(path: string) {
@@ -41,10 +47,11 @@ afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => i18n.changeLanguage("en"));
 
 describe("App", () => {
-  it("renders the projector logo instead of the clapperboard emoji", () => {
+  it("renders the projector logo instead of the clapperboard emoji", async () => {
     mockFetch({ generatedAt: null, sources: {}, cinemas: [] });
     const { container } = renderAt("/");
 
+    await screen.findByRole("button", { name: "Sign in" });
     expect(screen.getByRole("heading", { name: "OV Cinema Linz" })).toBeInTheDocument();
     expect(container.querySelector(".marquee-logo")).toHaveAttribute(
       "src",

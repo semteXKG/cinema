@@ -1,6 +1,14 @@
 {
   "brand": "OV Cinema Linz",
   "tagline": "Original Versions in Linz",
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "emailPlaceholder": "your@email.com",
+    "sendLink": "Send link",
+    "emailSent": "Check your email!",
+    "signInWith": "Sign in with {{provider}}"
+  },
   "sidebar": {
     "telegram": "Get notified about new OV showings on Telegram",
     "telegramSub": "Channel: @ov_linz — free, no spam, only new showings.",
