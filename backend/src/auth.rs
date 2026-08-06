@@ -572,13 +572,27 @@ async fn sso_github_callback(
             tracing::error!("github user fetch failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?
+        .error_for_status()
+        .map_err(|e| {
+            tracing::error!("github user fetch error status: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
         .json()
         .await
         .map_err(|e| {
             tracing::error!("github user parse failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    let id = user["id"].as_i64().unwrap_or(0).to_string();
+    let id = match user["id"].as_i64() {
+        Some(id) => id.to_string(),
+        None => {
+            tracing::error!("github user response missing id");
+            return Ok(redirect_to(&format!(
+                "{}/?error=oauth_failed",
+                state.base_url
+            )));
+        }
+    };
     // Fetch verified primary email
     let emails: Vec<serde_json::Value> = http
         .get("https://api.github.com/user/emails")
@@ -588,6 +602,11 @@ async fn sso_github_callback(
         .await
         .map_err(|e| {
             tracing::error!("github emails fetch failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .error_for_status()
+        .map_err(|e| {
+            tracing::error!("github emails fetch error status: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?
         .json()
