@@ -130,7 +130,10 @@ jobs:
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Deploy with Helm
+        env:
+          APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
         run: |
+          printf '%s' "$APPLE_PRIVATE_KEY" > /tmp/apple-key.pem
           helm upgrade --install ov-watcher ./helm/ov-watcher \
             --namespace default \
             --set image.tag=${{ steps.tag.outputs.sha }} \
@@ -140,7 +143,7 @@ jobs:
             --set secrets.appleClientId="${{ secrets.APPLE_CLIENT_ID }}" \
             --set secrets.appleTeamId="${{ secrets.APPLE_TEAM_ID }}" \
             --set secrets.appleKeyId="${{ secrets.APPLE_KEY_ID }}" \
-            --set secrets.applePrivateKey="${{ secrets.APPLE_PRIVATE_KEY }}" \
+            --set-file secrets.applePrivateKey=/tmp/apple-key.pem \
             --set secrets.githubClientId="${{ secrets.GITHUB_CLIENT_ID }}" \
             --set secrets.githubClientSecret="${{ secrets.GITHUB_CLIENT_SECRET }}" \
             --set secrets.smtpPassword="${{ secrets.SMTP_PASSWORD }}" \

@@ -202,11 +202,16 @@ pub async fn find_or_create_user(
         tx.commit().await?;
         return Ok(uid);
     }
-    // existing user with this email?
-    let existing_user: Option<(i64,)> = sqlx::query_as("SELECT id FROM users WHERE email = $1")
-        .bind(email)
-        .fetch_optional(&mut *tx)
-        .await?;
+    // existing user with this email? Skip the lookup when there is no email so
+    // that an empty email never links distinct accounts together.
+    let existing_user: Option<(i64,)> = if email.is_empty() {
+        None
+    } else {
+        sqlx::query_as("SELECT id FROM users WHERE email = $1")
+            .bind(email)
+            .fetch_optional(&mut *tx)
+            .await?
+    };
     let user_id = match existing_user {
         Some((id,)) => id,
         None => {
@@ -480,6 +485,17 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(uid1, uid2);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn find_or_create_user_empty_email_does_not_link(pool: PgPool) {
+        let uid1 = find_or_create_user(&pool, "github", "user-1", "")
+            .await
+            .unwrap();
+        let uid2 = find_or_create_user(&pool, "github", "user-2", "")
+            .await
+            .unwrap();
+        assert_ne!(uid1, uid2);
     }
 
     #[sqlx::test(migrations = "./migrations")]

@@ -476,11 +476,16 @@ async fn sso_callback_oidc(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let sub = claims.subject().to_string();
-    // Apple only returns email on the first login; store whatever we have
-    let email = claims
-        .email()
-        .map(|e| e.as_str().to_string())
-        .unwrap_or_else(|| format!("{provider}-{sub}@unknown"));
+    // Apple only returns email on the first login; store whatever we have.
+    // Google: only use the email claim when the provider verified it.
+    let email = if provider == "google" && claims.email_verified() != Some(true) {
+        format!("{provider}-{sub}@unknown")
+    } else {
+        claims
+            .email()
+            .map(|e| e.as_str().to_string())
+            .unwrap_or_else(|| format!("{provider}-{sub}@unknown"))
+    };
     let user_id = db::find_or_create_user(&state.pool, provider, &sub, &email)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
