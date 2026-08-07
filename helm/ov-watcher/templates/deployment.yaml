@@ -15,8 +15,9 @@ spec:
     metadata:
       labels:
         app: ov-watcher
-      annotations:
-        # Opt out of Datadog APM init-container injection: ~2.5 min of
+        # Opt out of Datadog APM init-container injection. Must be a LABEL:
+        # the datadog.webhook.lib.injection webhook's objectSelector matches
+        # labels (annotation.datadoghq.com/enabled is ignored). ~2.5 min of
         # per-language lib init containers made the 120s rollout timeout fail.
         admission.datadoghq.com/enabled: "false"
     spec:
