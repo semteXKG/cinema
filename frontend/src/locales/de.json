@@ -6,7 +6,6 @@
     "signOut": "Abmelden",
     "emailPlaceholder": "deine@email.com",
     "sendLink": "Link senden",
-    "emailSent": "Prüfe deine E-Mails!",
     "waiting": "Prüfe deine E-Mails — warte auf Bestätigung…",
     "confirmed": "Anmeldung bestätigt — du kannst diesen Tab schließen.",
     "signInWith": "Anmelden mit {{provider}}"

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -6,12 +6,21 @@ import { useAuth } from "../hooks/useAuth";
 
 export function Marquee() {
   const { t } = useTranslation();
-  const { user, loading, providers, loginEmail, loginSSO, logout } = useAuth();
+  const { user, loading, providers, loginEmail, pollLoginStatus, loginSSO, logout } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [sending, setSending] = useState(false);
   const [searchParams] = useSearchParams();
   const confirmed = searchParams.get("login") === "confirmed";
+
+  useEffect(() => {
+    if (!confirmed || user || loading) return;
+    let cancelled = false;
+    void pollLoginStatus(undefined, 20_000, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmed, user, loading, pollLoginStatus]);
 
   const handleEmailSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -54,7 +63,7 @@ export function Marquee() {
           )
         )}
       </nav>
-      {confirmed && (
+      {confirmed && !user && !loading && (
         <div className="auth-panel">
           <p className="auth-note">{t("auth.confirmed")}</p>
         </div>

@@ -214,13 +214,17 @@ async fn get_login_status(State(state): State<AppState>, headers: HeaderMap) -> 
     let st = match db::lookup_email_token(&state.pool, &token).await {
         Ok(Some(st)) => st,
         // unknown or expired token: clear the stale cookie
-        _ => {
+        Ok(None) => {
             return (
                 StatusCode::OK,
                 [(header::SET_COOKIE, cleared_pending_cookie())],
                 Json(LoginStatusResponse { logged_in: false }),
             )
                 .into_response();
+        }
+        Err(e) => {
+            tracing::error!("lookup_email_token failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
     if !st.used {
@@ -240,18 +244,23 @@ async fn get_login_status(State(state): State<AppState>, headers: HeaderMap) -> 
         tracing::error!("create_session failed: {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    let mut headers = HeaderMap::new();
-    headers.append(
+    let mut res_headers = HeaderMap::new();
+    res_headers.append(
         header::SET_COOKIE,
-        build_session_cookie(&session_token).await.parse().unwrap(),
+        build_session_cookie(&session_token)
+            .await
+            .parse()
+            .expect("fixed ascii cookie format"),
     );
-    headers.append(
+    res_headers.append(
         header::SET_COOKIE,
-        cleared_pending_cookie().parse().unwrap(),
+        cleared_pending_cookie()
+            .parse()
+            .expect("fixed ascii cookie format"),
     );
     (
         StatusCode::OK,
-        headers,
+        res_headers,
         Json(LoginStatusResponse { logged_in: true }),
     )
         .into_response()
@@ -984,11 +993,40 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 200);
-        let set_cookie = resp.headers().get("set-cookie").unwrap().to_str().unwrap();
-        assert!(set_cookie.starts_with("ov_session="), "got: {set_cookie}");
+        let cookies = resp
+            .headers()
+            .get_all("set-cookie")
+            .into_iter()
+            .map(|c| c.to_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        assert!(
+            cookies.iter().any(|c| c.starts_with("ov_session=")),
+            "expected an ov_session cookie, got: {cookies:?}"
+        );
+        assert!(
+            cookies.iter().any(|c| c.starts_with("ov_pending=;")),
+            "expected the cleared ov_pending cookie, got: {cookies:?}"
+        );
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["loggedIn"], true);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn login_status_db_error_returns_500(pool: PgPool) {
+        let state = test_state(pool.clone());
+        let app = Router::new().merge(auth_router()).with_state(state);
+        pool.close().await;
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/login/status")
+                    .header("Cookie", format!("{PENDING_COOKIE_NAME}=whatever"))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 500);
     }
 
     #[sqlx::test(migrations = "./migrations")]

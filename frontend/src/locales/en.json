@@ -6,7 +6,6 @@
     "signOut": "Sign out",
     "emailPlaceholder": "your@email.com",
     "sendLink": "Send link",
-    "emailSent": "Check your email!",
     "waiting": "Check your email — waiting for confirmation…",
     "confirmed": "Sign-in confirmed — you can close this tab.",
     "signInWith": "Sign in with {{provider}}"

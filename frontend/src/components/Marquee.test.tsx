@@ -138,4 +138,43 @@ describe("Marquee auth", () => {
     );
     await waitFor(() => expect(screen.getByText(/close this tab/)).toBeDefined());
   });
+
+  it("completes login via the mount poll when returning with ?login=confirmed", async () => {
+    vi.useFakeTimers();
+    mockFetchMe
+      .mockRejectedValueOnce(new Error("not auth"))
+      .mockResolvedValueOnce({ id: 1, email: "a@b.com" });
+    mockFetchProviders.mockResolvedValue({
+      email: true,
+      google: false,
+      apple: false,
+      github: false,
+    });
+    mockFetchLoginStatus.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    render(
+      <MemoryRouter initialEntries={["/?login=confirmed"]}>
+        <AuthProvider>
+          <Marquee />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    await act(async () => {});
+    expect(screen.getByText("Sign in")).toBeDefined();
+    expect(screen.queryByText("Sign out")).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    await act(async () => {});
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(screen.getByText("Sign out")).toBeDefined();
+    expect(mockFetchLoginStatus).toHaveBeenCalledTimes(2);
+  });
 });

@@ -7,6 +7,11 @@ interface AuthState {
   loading: boolean;
   providers: AuthProviders | null;
   loginEmail: (email: string) => Promise<void>;
+  pollLoginStatus: (
+    sendEmail?: () => Promise<void>,
+    maxMs?: number,
+    isCancelled?: () => boolean,
+  ) => Promise<void>;
   loginSSO: (provider: string) => void;
   logout: () => Promise<void>;
 }
@@ -16,6 +21,7 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   providers: null,
   loginEmail: async () => {},
+  pollLoginStatus: async () => {},
   loginSSO: () => {},
   logout: async () => {},
 });
@@ -45,21 +51,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const loginEmail = useCallback(async (email: string) => {
-    await sendMagicLink(email);
-    const deadline = Date.now() + 15 * 60 * 1000;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 3000));
-      try {
-        if (await fetchLoginStatus()) {
-          await refresh();
-          return;
-        }
-      } catch {
-        // transient network error: keep polling
+  const pollLoginStatus = useCallback(
+    async (sendEmail?: () => Promise<void>, maxMs = 15 * 60 * 1000, isCancelled?: () => boolean) => {
+      if (sendEmail) {
+        await sendEmail();
       }
-    }
-  }, [refresh]);
+      const deadline = Date.now() + maxMs;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        if (isCancelled?.()) return;
+        try {
+          if (await fetchLoginStatus()) {
+            await refresh();
+            return;
+          }
+        } catch {
+          // transient network error: keep polling
+        }
+      }
+    },
+    [refresh],
+  );
+
+  const loginEmail = useCallback(async (email: string) => {
+    await pollLoginStatus(() => sendMagicLink(email));
+  }, [pollLoginStatus]);
 
   const loginSSO = useCallback((provider: string) => {
     window.location.href = `/api/auth/sso/${provider}`;
@@ -71,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, providers, loginEmail, loginSSO, logout }}>
+    <AuthContext.Provider value={{ user, loading, providers, loginEmail, pollLoginStatus, loginSSO, logout }}>
       {children}
     </AuthContext.Provider>
   );
