@@ -172,14 +172,12 @@ pub async fn insert_email_token(
     Ok(())
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct EmailTokenState {
     pub email: String,
     pub used: bool,
 }
 
-#[allow(dead_code)]
 pub async fn lookup_email_token(
     pool: &PgPool,
     token: &str,

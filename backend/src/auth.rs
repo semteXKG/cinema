@@ -53,6 +53,12 @@ struct OkResponse {
     ok: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LoginStatusResponse {
+    logged_in: bool,
+}
+
 const SESSION_COOKIE_NAME: &str = "ov_session";
 const SESSION_DAYS: i64 = 30;
 const STATE_COOKIE_NAME: &str = "ov_oauth_state";
@@ -199,6 +205,63 @@ async fn get_verify(
             state.base_url
         ))),
     }
+}
+
+async fn get_login_status(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let Some(token) = read_cookie(&headers, PENDING_COOKIE_NAME) else {
+        return Json(LoginStatusResponse { logged_in: false }).into_response();
+    };
+    let st = match db::lookup_email_token(&state.pool, &token).await {
+        Ok(Some(st)) => st,
+        // unknown or expired token: clear the stale cookie
+        _ => {
+            return (
+                StatusCode::OK,
+                [(header::SET_COOKIE, cleared_pending_cookie())],
+                Json(LoginStatusResponse { logged_in: false }),
+            )
+                .into_response();
+        }
+    };
+    if !st.used {
+        return Json(LoginStatusResponse { logged_in: false }).into_response();
+    }
+    // email confirmed: issue a session on the requesting device
+    let user_id = match db::find_or_create_user(&state.pool, "email", &st.email, &st.email).await {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::error!("find_or_create_user failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let session_token = new_token();
+    let expires = Utc::now() + chrono::Duration::days(SESSION_DAYS);
+    if let Err(e) = db::create_session(&state.pool, user_id, &session_token, expires).await {
+        tracing::error!("create_session failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    let mut headers = HeaderMap::new();
+    headers.append(
+        header::SET_COOKIE,
+        build_session_cookie(&session_token).await.parse().unwrap(),
+    );
+    headers.append(
+        header::SET_COOKIE,
+        cleared_pending_cookie().parse().unwrap(),
+    );
+    (
+        StatusCode::OK,
+        headers,
+        Json(LoginStatusResponse { logged_in: true }),
+    )
+        .into_response()
+}
+
+fn cleared_pending_cookie() -> String {
+    format!(
+        "{name}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
+        name = PENDING_COOKIE_NAME,
+    )
 }
 
 async fn get_me(auth: AuthUser) -> Result<Json<MeResponse>, StatusCode> {
@@ -700,6 +763,7 @@ pub fn auth_router() -> Router<AppState> {
     Router::new()
         .route("/api/auth/email", post(post_email))
         .route("/api/auth/verify", get(get_verify))
+        .route("/api/auth/login/status", get(get_login_status))
         .route("/api/auth/sso/google", get(sso_google))
         .route("/api/auth/sso/google/callback", get(sso_google_callback))
         .route("/api/auth/sso/apple", get(sso_apple))
@@ -857,6 +921,103 @@ mod tests {
             cookie,
             "ov_pending=tok123; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900"
         );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn login_status_without_cookie_is_false(pool: PgPool) {
+        let state = test_state(pool);
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/login/status")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["loggedIn"], false);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn login_status_pending_then_logged_in(pool: PgPool) {
+        use rand::Rng;
+        let state = test_state(pool.clone());
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() + chrono::Duration::minutes(15);
+        db::insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+        let cookie = format!("{PENDING_COOKIE_NAME}={token}");
+
+        // not clicked yet -> false
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get("/api/auth/login/status")
+                    .header("Cookie", &cookie)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["loggedIn"], false);
+
+        // simulate the email link being clicked
+        let _ = db::consume_email_token(&pool, &token).await.unwrap();
+
+        // now the requester logs in
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/login/status")
+                    .header("Cookie", &cookie)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let set_cookie = resp.headers().get("set-cookie").unwrap().to_str().unwrap();
+        assert!(set_cookie.starts_with("ov_session="), "got: {set_cookie}");
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["loggedIn"], true);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn login_status_expired_token_clears_cookie(pool: PgPool) {
+        use rand::Rng;
+        let state = test_state(pool.clone());
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() - chrono::Duration::minutes(1);
+        db::insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+        let cookie = format!("{PENDING_COOKIE_NAME}={token}");
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/login/status")
+                    .header("Cookie", &cookie)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let set_cookie = resp.headers().get("set-cookie").unwrap().to_str().unwrap();
+        assert!(set_cookie.starts_with("ov_pending=;"), "got: {set_cookie}");
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["loggedIn"], false);
     }
 
     #[sqlx::test(migrations = "./migrations")]
