@@ -33,6 +33,10 @@ impl Config {
     }
 
     pub fn from_lookup(get: impl Fn(&str) -> Option<String>) -> anyhow::Result<Self> {
+        // Treat empty-string values as unset. Deployment configs (Helm, etc.)
+        // render unconfigured optional vars as "" rather than omitting them;
+        // those must not be seen as configured values or parse errors.
+        let get = |key: &str| get(key).filter(|v| !v.trim().is_empty());
         let database_url =
             get("DATABASE_URL").ok_or_else(|| anyhow::anyhow!("DATABASE_URL is required"))?;
         let sources = get("SOURCES")
@@ -182,6 +186,40 @@ mod tests {
             ("SMTP_PORT", "abc"),
         ]));
         assert!(cfg.is_err());
+    }
+
+    #[test]
+    fn empty_string_env_values_are_treated_as_unset() {
+        // Helm renders optional env vars as "" when unset; the parser must
+        // treat those as absent, not as configured values or parse errors.
+        let cfg = Config::from_lookup(env_of(&[
+            ("DATABASE_URL", "postgres://x"),
+            ("SMTP_HOST", ""),
+            ("SMTP_PORT", ""),
+            ("SMTP_USERNAME", ""),
+            ("SMTP_PASSWORD", ""),
+            ("SMTP_FROM", ""),
+            ("GOOGLE_CLIENT_ID", ""),
+            ("GOOGLE_CLIENT_SECRET", ""),
+            ("APPLE_CLIENT_ID", ""),
+            ("APPLE_TEAM_ID", ""),
+            ("APPLE_KEY_ID", ""),
+            ("APPLE_PRIVATE_KEY", ""),
+            ("GITHUB_CLIENT_ID", ""),
+            ("GITHUB_CLIENT_SECRET", ""),
+            ("TELEGRAM_BOT_TOKEN", ""),
+            ("TELEGRAM_CHAT_ID", ""),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.smtp_port, 587);
+        assert_eq!(cfg.smtp_host, None);
+        assert_eq!(cfg.smtp_username, None);
+        assert_eq!(cfg.smtp_password, None);
+        assert_eq!(cfg.smtp_from, None);
+        assert_eq!(cfg.google_client_id, None);
+        assert_eq!(cfg.apple_team_id, None);
+        assert_eq!(cfg.github_client_secret, None);
+        assert_eq!(cfg.telegram_token, None);
     }
 
     #[test]
