@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const deadline = Date.now() + maxMs;
       while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 1000));
         if (isCancelled?.()) return;
         try {
           if (await fetchLoginStatus()) {

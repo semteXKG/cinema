@@ -165,10 +165,10 @@ describe("Marquee auth", () => {
     expect(screen.queryByText("Sign out")).toBeNull();
 
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(1000);
     });
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(1000);
     });
     await act(async () => {});
     await act(async () => {});
