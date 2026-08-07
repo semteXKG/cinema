@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
@@ -9,13 +9,19 @@ export function Marquee() {
   const { user, loading, providers, loginEmail, loginSSO, logout } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [emailInput, setEmailInput] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [searchParams] = useSearchParams();
+  const confirmed = searchParams.get("login") === "confirmed";
 
   const handleEmailSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!emailInput.trim()) return;
-    await loginEmail(emailInput.trim());
-    setSent(true);
+    if (!emailInput.trim() || sending) return;
+    setSending(true);
+    try {
+      await loginEmail(emailInput.trim());
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -48,6 +54,11 @@ export function Marquee() {
           )
         )}
       </nav>
+      {confirmed && (
+        <div className="auth-panel">
+          <p className="auth-note">{t("auth.confirmed")}</p>
+        </div>
+      )}
       {showLogin && !user && (
         <div className="auth-panel">
           {providers?.email && (
@@ -58,9 +69,10 @@ export function Marquee() {
                 placeholder={t("auth.emailPlaceholder")}
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
+                disabled={sending}
               />
-              <button className="auth-submit" type="submit">
-                {sent ? t("auth.emailSent") : t("auth.sendLink")}
+              <button className="auth-submit" type="submit" disabled={sending}>
+                {sending ? t("auth.waiting") : t("auth.sendLink")}
               </button>
             </form>
           )}

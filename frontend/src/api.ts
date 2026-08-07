@@ -28,6 +28,13 @@ export async function sendMagicLink(email: string): Promise<void> {
   });
 }
 
+export async function fetchLoginStatus(): Promise<boolean> {
+  const resp = await fetch("/api/auth/login/status");
+  if (!resp.ok) throw new Error("login status failed");
+  const data = (await resp.json()) as { loggedIn: boolean };
+  return data.loggedIn;
+}
+
 export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }

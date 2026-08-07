@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Marquee } from "./Marquee";
 import { AuthProvider } from "../hooks/useAuth";
@@ -11,6 +11,8 @@ vi.mock("../api");
 const mockFetchMe = vi.mocked(api.fetchMe);
 const mockFetchProviders = vi.mocked(api.fetchProviders);
 const mockLogout = vi.mocked(api.logout);
+const mockSendMagicLink = vi.mocked(api.sendMagicLink);
+const mockFetchLoginStatus = vi.mocked(api.fetchLoginStatus);
 
 function renderMarquee() {
   return render(
@@ -26,6 +28,12 @@ describe("Marquee auth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     i18n.changeLanguage("en");
+    mockSendMagicLink.mockResolvedValue(undefined);
+    mockFetchLoginStatus.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows sign in button when not authenticated", async () => {
@@ -92,5 +100,42 @@ describe("Marquee auth", () => {
     await waitFor(() => {
       expect(mockLogout).toHaveBeenCalled();
     });
+  });
+
+  it("shows waiting state while login email is pending", async () => {
+    vi.useFakeTimers();
+    mockFetchMe.mockRejectedValue(new Error("not auth"));
+    mockFetchProviders.mockResolvedValue({
+      email: true,
+      google: false,
+      apple: false,
+      github: false,
+    });
+    renderMarquee();
+    await act(async () => {});
+    fireEvent.click(screen.getByText("Sign in"));
+    fireEvent.change(screen.getByPlaceholderText("your@email.com"), {
+      target: { value: "a@b.com" },
+    });
+    fireEvent.click(screen.getByText("Send link"));
+    expect(screen.getByText(/waiting for confirmation/)).toBeDefined();
+  });
+
+  it("renders the confirmed banner when ?login=confirmed", async () => {
+    mockFetchMe.mockRejectedValue(new Error("not auth"));
+    mockFetchProviders.mockResolvedValue({
+      email: true,
+      google: false,
+      apple: false,
+      github: false,
+    });
+    render(
+      <MemoryRouter initialEntries={["/?login=confirmed"]}>
+        <AuthProvider>
+          <Marquee />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/close this tab/)).toBeDefined());
   });
 });

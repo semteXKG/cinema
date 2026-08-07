@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { fetchMe, fetchProviders, sendMagicLink, logout as apiLogout } from "../api";
+import { fetchMe, fetchProviders, sendMagicLink, fetchLoginStatus, logout as apiLogout } from "../api";
 import type { AuthUser, AuthProviders } from "../types";
 
 interface AuthState {
@@ -47,7 +47,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginEmail = useCallback(async (email: string) => {
     await sendMagicLink(email);
-  }, []);
+    const deadline = Date.now() + 15 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        if (await fetchLoginStatus()) {
+          await refresh();
+          return;
+        }
+      } catch {
+        // transient network error: keep polling
+      }
+    }
+  }, [refresh]);
 
   const loginSSO = useCallback((provider: string) => {
     window.location.href = `/api/auth/sso/${provider}`;
