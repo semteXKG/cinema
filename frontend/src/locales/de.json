@@ -7,7 +7,8 @@
     "emailPlaceholder": "deine@email.com",
     "sendLink": "Link senden",
     "waiting": "Prüfe deine E-Mails — warte auf Bestätigung…",
-    "confirmed": "Anmeldung bestätigt — du kannst diesen Tab schließen.",
+    "confirmed": "Anmeldung bestätigt — du kannst dieses Fenster schließen.",
+    "loggedIn": "Du bist angemeldet — du kannst dieses Fenster schließen.",
     "signInWith": "Anmelden mit {{provider}}"
   },
   "sidebar": {
