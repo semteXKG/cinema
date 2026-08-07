@@ -95,6 +95,25 @@ fn redirect_to_with_cookie(location: &str, cookie: &str) -> Response {
         .unwrap()
 }
 
+fn build_mailer(
+    smtp: &crate::web::SmtpConfig,
+) -> Result<AsyncSmtpTransport<Tokio1Executor>, StatusCode> {
+    let creds = Credentials::new(
+        smtp.username.clone().unwrap_or_default(),
+        smtp.password.clone(),
+    );
+    Ok(
+        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp.host)
+            .map_err(|e| {
+                tracing::error!("smtp relay: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .port(smtp.port)
+            .credentials(creds)
+            .build(),
+    )
+}
+
 // ---------- handlers ----------
 
 async fn post_email(
@@ -131,18 +150,7 @@ async fn post_email(
             tracing::error!("build email: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    let creds = Credentials::new(
-        smtp.username.clone().unwrap_or_default(),
-        smtp.password.clone(),
-    );
-    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp.host)
-        .map_err(|e| {
-            tracing::error!("smtp relay: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .port(smtp.port)
-        .credentials(creds)
-        .build();
+    let mailer = build_mailer(smtp)?;
     if let Err(e) = mailer.send(email).await {
         tracing::error!("send email failed: {e}");
     }
@@ -813,5 +821,49 @@ mod tests {
         assert_eq!(resp.status(), 302);
         let location = resp.headers().get("location").unwrap().to_str().unwrap();
         assert!(location.contains("error=invalid_token"));
+    }
+
+    #[tokio::test]
+    async fn mailer_speaks_starttls_not_implicit_tls() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        // Local plaintext SMTP server that greets, then captures the first
+        // bytes the client sends. A STARTTLS client sends "EHLO ..." in the
+        // clear; an implicit-TLS client sends a TLS ClientHello (record type
+        // 0x16) which Resend's port 587 rejects.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            sock.write_all(b"220 test ESMTP\r\n").await.unwrap();
+            let mut buf = [0u8; 64];
+            let n = sock.read(&mut buf).await.unwrap();
+            buf[..n].to_vec()
+        });
+
+        let smtp = crate::web::SmtpConfig {
+            host: addr.ip().to_string(),
+            port: addr.port(),
+            username: Some("resend".into()),
+            password: "test".into(),
+            from: "noreply@example.com".into(),
+        };
+        let mailer = build_mailer(&smtp).unwrap();
+        let email = Message::builder()
+            .from("noreply@example.com".parse().unwrap())
+            .to("x@y.com".parse().unwrap())
+            .subject("test")
+            .body("hi".to_string())
+            .unwrap();
+        // Connection will die after the client's first command; that's fine.
+        let _ = mailer.send(email).await;
+
+        let first_bytes = server.await.unwrap();
+        assert!(
+            first_bytes.starts_with(b"EHLO") || first_bytes.starts_with(b"HELO"),
+            "client sent {:?}, expected a plaintext EHLO (STARTTLS), not an implicit TLS handshake",
+            String::from_utf8_lossy(&first_bytes)
+        );
     }
 }
