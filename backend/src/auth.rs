@@ -56,12 +56,20 @@ struct OkResponse {
 const SESSION_COOKIE_NAME: &str = "ov_session";
 const SESSION_DAYS: i64 = 30;
 const STATE_COOKIE_NAME: &str = "ov_oauth_state";
+const PENDING_COOKIE_NAME: &str = "ov_pending";
 
 async fn build_session_cookie(token: &str) -> String {
     format!(
         "{name}={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={age}",
         name = SESSION_COOKIE_NAME,
         age = SESSION_DAYS * 86400,
+    )
+}
+
+fn build_pending_cookie(token: &str) -> String {
+    format!(
+        "{name}={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900",
+        name = PENDING_COOKIE_NAME,
     )
 }
 
@@ -144,12 +152,13 @@ fn build_login_email(from: &str, to: &str, link: &str) -> Result<Message, Status
 async fn post_email(
     State(state): State<AppState>,
     Json(body): Json<EmailRequest>,
-) -> Result<Json<OkResponse>, StatusCode> {
+) -> Result<Response, StatusCode> {
     let smtp = state
         .smtp_config
         .as_ref()
         .ok_or(StatusCode::NOT_IMPLEMENTED)?;
     let token = new_token();
+    let pending_cookie = build_pending_cookie(&token);
     let expires = Utc::now() + chrono::Duration::minutes(15);
     db::insert_email_token(&state.pool, &body.email, &token, expires)
         .await
@@ -164,7 +173,12 @@ async fn post_email(
         tracing::error!("send email failed: {e}");
     }
     // Always return ok to avoid email enumeration
-    Ok(Json(OkResponse { ok: true }))
+    Ok((
+        StatusCode::OK,
+        [(header::SET_COOKIE, pending_cookie)],
+        Json(OkResponse { ok: true }),
+    )
+        .into_response())
 }
 
 async fn get_verify(
@@ -179,20 +193,7 @@ async fn get_verify(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     match email {
-        Some(email) => {
-            let user_id = db::find_or_create_user(&state.pool, "email", &email, &email)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let session_token = new_token();
-            let expires = Utc::now() + chrono::Duration::days(SESSION_DAYS);
-            db::create_session(&state.pool, user_id, &session_token, expires)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            Ok(redirect_to_with_cookie(
-                &state.base_url,
-                &build_session_cookie(&session_token).await,
-            ))
-        }
+        Some(_) => Ok(redirect_to(&format!("{}/?login=confirmed", state.base_url))),
         None => Ok(redirect_to(&format!(
             "{}/?error=invalid_token",
             state.base_url
@@ -813,6 +814,49 @@ mod tests {
                 .unwrap();
             assert_eq!(resp.status(), 501);
         }
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn verify_consumes_token_but_issues_no_session(pool: PgPool) {
+        use rand::Rng;
+        let state = test_state(pool.clone());
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() + chrono::Duration::minutes(15);
+        db::insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::get(format!("/api/auth/verify?token={token}"))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 302);
+        let location = resp.headers().get("location").unwrap().to_str().unwrap();
+        assert!(location.contains("login=confirmed"));
+        // no session cookie is set
+        assert!(!resp.headers().contains_key("set-cookie"));
+        // token is consumed
+        let st = db::lookup_email_token(&pool, &token)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(st.used);
+    }
+
+    #[test]
+    fn pending_cookie_format() {
+        let cookie = build_pending_cookie("tok123");
+        assert_eq!(
+            cookie,
+            "ov_pending=tok123; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900"
+        );
     }
 
     #[sqlx::test(migrations = "./migrations")]
