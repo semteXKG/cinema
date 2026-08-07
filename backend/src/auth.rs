@@ -114,6 +114,31 @@ fn build_mailer(
     )
 }
 
+fn build_login_email(from: &str, to: &str, link: &str) -> Result<Message, StatusCode> {
+    Message::builder()
+        .from(from.parse().map_err(|e| {
+            tracing::error!("invalid from: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?)
+        .to(to.parse().map_err(|e| {
+            tracing::error!("invalid to: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?)
+        .subject("OV-Kino Linz — Sign in")
+        .body(format!(
+            "Hi!\n\n\
+             A sign-in link was requested for OV-Kino Linz.\n\n\
+             Sign in:\n{link}\n\n\
+             This link is valid for 15 minutes and can be used once. \
+             After signing in, you'll stay logged in for 30 days.\n\n\
+             If you didn't request this, you can ignore this email."
+        ))
+        .map_err(|e| {
+            tracing::error!("build email: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
+}
+
 // ---------- handlers ----------
 
 async fn post_email(
@@ -133,23 +158,7 @@ async fn post_email(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     let link = format!("{}/api/auth/verify?token={}", state.base_url, token);
-    let email = Message::builder()
-        .from(smtp.from.parse().map_err(|e| {
-            tracing::error!("invalid from: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?)
-        .to(body.email.parse().map_err(|e| {
-            tracing::error!("invalid to: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?)
-        .subject("OV-Kino Linz — Sign in")
-        .body(format!(
-            "Click here to sign in: {link}\n\nThis link expires in 15 minutes."
-        ))
-        .map_err(|e| {
-            tracing::error!("build email: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let email = build_login_email(&smtp.from, &body.email, &link)?;
     let mailer = build_mailer(smtp)?;
     if let Err(e) = mailer.send(email).await {
         tracing::error!("send email failed: {e}");
@@ -864,6 +873,58 @@ mod tests {
             first_bytes.starts_with(b"EHLO") || first_bytes.starts_with(b"HELO"),
             "client sent {:?}, expected a plaintext EHLO (STARTTLS), not an implicit TLS handshake",
             String::from_utf8_lossy(&first_bytes)
+        );
+    }
+
+    #[test]
+    fn login_email_has_context_and_expiry() {
+        // `formatted()` emits quoted-printable: "=" is "=3D", soft line wraps
+        // are "=\n". Decode it so assertions work on the plain body.
+        fn decode_qp(input: &str) -> String {
+            let mut out = String::new();
+            let mut chars = input.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '=' {
+                    if chars.peek() == Some(&'\n') {
+                        chars.next();
+                    } else {
+                        let hex: String = chars.by_ref().take(2).collect();
+                        out.push(
+                            u8::from_str_radix(&hex, 16)
+                                .ok()
+                                .map(char::from)
+                                .unwrap_or('?'),
+                        );
+                    }
+                } else {
+                    out.push(c);
+                }
+            }
+            out
+        }
+
+        let msg = build_login_email(
+            "noreply@cinema.k-labs.app",
+            "user@example.com",
+            "https://cinema.k-labs.app/api/auth/verify?token=abc123",
+        )
+        .unwrap();
+        let body = decode_qp(&String::from_utf8_lossy(&msg.formatted()));
+        assert!(
+            body.contains("https://cinema.k-labs.app/api/auth/verify?token=abc123"),
+            "body should contain the sign-in link: {body}"
+        );
+        assert!(
+            body.contains("15 minutes"),
+            "body should mention the link expiry: {body}"
+        );
+        assert!(
+            body.contains("30 days"),
+            "body should say the session lasts 30 days: {body}"
+        );
+        assert!(
+            body.contains("OV-Kino Linz"),
+            "body should identify the service: {body}"
         );
     }
 }
