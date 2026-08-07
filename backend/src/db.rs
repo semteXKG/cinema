@@ -172,6 +172,27 @@ pub async fn insert_email_token(
     Ok(())
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct EmailTokenState {
+    pub email: String,
+    pub used: bool,
+}
+
+#[allow(dead_code)]
+pub async fn lookup_email_token(
+    pool: &PgPool,
+    token: &str,
+) -> sqlx::Result<Option<EmailTokenState>> {
+    let row: Option<(String, bool)> = sqlx::query_as(
+        "SELECT email, used FROM email_tokens WHERE token = $1 AND expires_at > now()",
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(email, used)| EmailTokenState { email, used }))
+}
+
 pub async fn consume_email_token(pool: &PgPool, token: &str) -> sqlx::Result<Option<String>> {
     let row: Option<(String,)> = sqlx::query_as(
         "UPDATE email_tokens SET used = true WHERE token = $1 AND used = false AND expires_at > now()
@@ -441,6 +462,44 @@ mod tests {
         // second consumption fails (already used)
         let email2 = consume_email_token(&pool, &token).await.unwrap();
         assert_eq!(email2, None);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn lookup_email_token_states(pool: PgPool) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() + chrono::Duration::minutes(15);
+        insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+
+        // not used yet
+        let st = lookup_email_token(&pool, &token).await.unwrap().unwrap();
+        assert_eq!(st.email, "a@b.com");
+        assert!(!st.used);
+
+        // after consumption, used=true
+        let _ = consume_email_token(&pool, &token).await.unwrap();
+        let st = lookup_email_token(&pool, &token).await.unwrap().unwrap();
+        assert!(st.used);
+
+        // unknown token -> None
+        assert!(lookup_email_token(&pool, "nope").await.unwrap().is_none());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn lookup_email_token_expired_returns_none(pool: PgPool) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let token_bytes: [u8; 32] = rng.gen();
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+        let expires = Utc::now() - chrono::Duration::minutes(1);
+        insert_email_token(&pool, "a@b.com", &token, expires)
+            .await
+            .unwrap();
+        assert!(lookup_email_token(&pool, &token).await.unwrap().is_none());
     }
 
     #[sqlx::test(migrations = "./migrations")]
