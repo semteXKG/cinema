@@ -144,8 +144,8 @@ jobs:
             --set secrets.appleTeamId="${{ secrets.APPLE_TEAM_ID }}" \
             --set secrets.appleKeyId="${{ secrets.APPLE_KEY_ID }}" \
             --set-file secrets.applePrivateKey=/tmp/apple-key.pem \
-            --set secrets.githubClientId="${{ secrets.GITHUB_CLIENT_ID }}" \
-            --set secrets.githubClientSecret="${{ secrets.GITHUB_CLIENT_SECRET }}" \
+            --set secrets.githubClientId="${{ secrets.GH_CLIENT_ID }}" \
+            --set secrets.githubClientSecret="${{ secrets.GH_CLIENT_SECRET }}" \
             --set secrets.smtpPassword="${{ secrets.SMTP_PASSWORD }}" \
             --set config.smtpHost="${{ secrets.SMTP_HOST }}" \
             --set config.smtpPort="${{ secrets.SMTP_PORT }}" \
