@@ -8,7 +8,31 @@ How to run the OV Cinema watcher locally (Rust backend + React frontend + Postgr
 - Node.js 22 + npm
 - Docker Engine + Compose (`docker compose` — see note below)
 
-## 1. Start Postgres
+## Dev stack (recommended)
+
+Everything in one command — Postgres, backend (auto-recompiles on change),
+and the Vite dev server:
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+- Backend on http://localhost:8080, frontend on http://localhost:5173.
+- Backend recompiles via `cargo watch` on save; the frontend hot-reloads.
+- The backend's cargo `target/` lives in a named volume, so rebuilds stay
+  incremental across restarts.
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` are passed through from a `.env`
+  file in the repo root if present (see the optional Telegram section below).
+
+Stop with `Ctrl-C`; bring everything down with `docker compose -f
+docker-compose.dev.yml down`.
+
+## Manual alternative
+
+Run each piece natively instead — Postgres via the root compose file, backend
+via `cargo`, frontend via Vite.
+
+### 1. Start Postgres
 
 ```bash
 docker compose up -d db        # Postgres 17 on localhost:5432, user ov / password ov / db ov
@@ -27,7 +51,7 @@ Every shell that runs the app or tests needs:
 export DATABASE_URL=postgres://ov:ov@localhost:5432/ov
 ```
 
-## 2. Run the backend
+### 2. Run the backend
 
 ```bash
 cd backend
@@ -66,7 +90,7 @@ STATIC_DIR=../frontend/dist cargo run        # after: cd frontend && npm run bui
 
 …or just use the Vite dev server (recommended, next section) instead.
 
-## 3. Run the frontend dev server (for UI work)
+### 3. Run the frontend dev server (for UI work)
 
 ```bash
 cd frontend
@@ -76,6 +100,8 @@ npm run dev          # http://localhost:5173
 
 Vite proxies `/api`, `/posters`, `/showings.ics`, `/healthz` to `http://localhost:8080`,
 so keep the backend running on 8080. You get hot reload; the backend serves data.
+`VITE_PROXY_TARGET` overrides the proxy target (default `http://localhost:8080`)
+— the compose stack sets it to `http://backend:8080`.
 
 ## 4. Tests
 
