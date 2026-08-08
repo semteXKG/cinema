@@ -166,3 +166,21 @@
  .auth-sso{background:var(--panel);border:1px solid var(--edge);color:var(--text);
   border-radius:4px;padding:.3rem .7rem;font-size:.75rem;cursor:pointer}
  .auth-sso:hover{border-color:var(--gold);color:var(--gold)}
+ .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;z-index:100;
+  padding:1rem}
+ .modal{background:var(--panel);border:1px solid var(--edge);border-radius:8px;
+  padding:1.2rem 1.4rem;max-width:320px;width:100%;text-align:center;
+  position:relative}
+ .modal-title{margin:0 0 .8rem;color:var(--gold);font-size:1.1rem}
+ .modal-close{position:absolute;top:.4rem;right:.5rem;background:none;
+  border:1px solid var(--edge);color:var(--dim);border-radius:4px;
+  padding:0 .4rem;font-size:.9rem;cursor:pointer}
+ .modal-close:hover{color:var(--gold);border-color:var(--gold)}
+ .modal form{display:flex;flex-direction:column;gap:.5rem;align-items:center}
+ .modal .auth-input{width:100%;max-width:220px}
+ .modal .auth-sso{display:block;width:100%;margin-top:.5rem}
+ .modal-divider{margin:.9rem 0;color:var(--dim);font-size:.75rem;
+  display:flex;align-items:center;gap:.6rem}
+ .modal-divider::before,.modal-divider::after{content:"";flex:1;
+  height:1px;background:var(--edge)}

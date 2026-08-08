@@ -10,7 +10,8 @@
     "confirmed": "Sign-in confirmed — you can close this window.",
     "loggedIn": "You have been logged in — you can close this window.",
     "invalidLink": "This sign-in link has expired or was already used. Please request a new one on the device where you want to sign in.",
-    "signInWith": "Sign in with {{provider}}"
+    "signInWith": "Sign in with {{provider}}",
+    "or": "or"
   },
   "sidebar": {
     "telegram": "Get notified about new OV showings on Telegram",

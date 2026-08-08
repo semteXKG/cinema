@@ -10,7 +10,8 @@
     "confirmed": "Anmeldung bestätigt — du kannst dieses Fenster schließen.",
     "loggedIn": "Du bist angemeldet — du kannst dieses Fenster schließen.",
     "invalidLink": "Dieser Anmelde-Link ist abgelaufen oder wurde bereits verwendet. Bitte fordere einen neuen Link auf dem Gerät an, auf dem du dich anmelden möchtest.",
-    "signInWith": "Anmelden mit {{provider}}"
+    "signInWith": "Anmelden mit {{provider}}",
+    "or": "oder"
   },
   "sidebar": {
     "telegram": "Benachrichtigung über neue OV-Vorstellungen auf Telegram",
