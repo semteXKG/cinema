@@ -40,10 +40,9 @@ services:
   frontend:
     image: node:22-alpine
     working_dir: /app
-    command: npm run dev
+    command: npm run dev -- --host
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_PROXY_TARGET: http://backend:8080
     ports:
