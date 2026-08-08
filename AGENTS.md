@@ -65,8 +65,7 @@ Cluster facts:
 - GitHub secrets: `TELEGRAM_BOT_TOKEN`, `POSTGRES_PASSWORD`
   (must stay stable — it seeds the Postgres StatefulSet and the app's
   `DATABASE_URL`; changing it breaks existing pods), plus auth/smtp secrets:
-  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APPLE_CLIENT_ID`,
-  `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `GITHUB_CLIENT_ID`,
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`,
   `GITHUB_CLIENT_SECRET`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
   `SMTP_PASSWORD`, `SMTP_FROM`.
 - The deploy runner's service account needs cluster access — granted via

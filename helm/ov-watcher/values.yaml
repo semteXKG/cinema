@@ -24,10 +24,6 @@ secrets:
   databaseUrl: ""     # only used when postgres.create=false
   googleClientId: ""
   googleClientSecret: ""
-  appleClientId: ""
-  appleTeamId: ""
-  appleKeyId: ""
-  applePrivateKey: ""
   githubClientId: ""
   githubClientSecret: ""
   smtpPassword: ""
