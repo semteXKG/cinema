@@ -83,4 +83,13 @@ describe("App", () => {
     expect(screen.getByText(/Last checked/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Impressum" })).toBeInTheDocument();
   });
+
+  it("renders the invalid-link page for ?error=invalid_token", async () => {
+    mockFetch({ generatedAt: null, sources: {}, cinemas: [] });
+    renderAt("/?error=invalid_token");
+    expect(
+      await screen.findByText(/This sign-in link has expired or was already used/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Impressum")).toBeNull();
+  });
 });
