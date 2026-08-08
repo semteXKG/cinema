@@ -97,6 +97,12 @@ including the icons:
 )}
 ```
 
+- [ ] **Step 3b: Remove the now-orphaned `.auth-sso` CSS**
+
+After the buttons switch to `.auth-provider`, `.auth-sso` (index.css lines
+~166-168) and `.modal .auth-sso` (line ~182) have no remaining users. Remove
+both rules. Verify: `rg -n "auth-sso" frontend/src/` returns nothing.
+
 - [ ] **Step 4: Update `LoginModal.test.tsx`**
 
 The existing text-based queries (`getByText("Sign in with Google")`) still
