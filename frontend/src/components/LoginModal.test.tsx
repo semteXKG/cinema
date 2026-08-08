@@ -34,7 +34,6 @@ describe("LoginModal", () => {
     mockFetchProviders.mockResolvedValue({
       email: true,
       google: true,
-      apple: false,
       github: true,
     });
     mockSendMagicLink.mockResolvedValue(undefined);

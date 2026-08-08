@@ -67,11 +67,6 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
             {t("auth.signInWith", { provider: "Google" })}
           </button>
         )}
-        {providers?.apple && (
-          <button className="auth-sso" onClick={() => loginSSO("apple")}>
-            {t("auth.signInWith", { provider: "Apple" })}
-          </button>
-        )}
         {providers?.github && (
           <button className="auth-sso" onClick={() => loginSSO("github")}>
             {t("auth.signInWith", { provider: "GitHub" })}

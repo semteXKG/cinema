@@ -41,7 +41,6 @@ describe("Marquee auth", () => {
     mockFetchProviders.mockResolvedValue({
       email: true,
       google: true,
-      apple: false,
       github: false,
     });
     renderMarquee();
@@ -55,7 +54,6 @@ describe("Marquee auth", () => {
     mockFetchProviders.mockResolvedValue({
       email: true,
       google: true,
-      apple: false,
       github: false,
     });
     renderMarquee();
@@ -75,7 +73,6 @@ describe("Marquee auth", () => {
     mockFetchProviders.mockResolvedValue({
       email: true,
       google: false,
-      apple: false,
       github: false,
     });
     renderMarquee();
@@ -89,7 +86,6 @@ describe("Marquee auth", () => {
     mockFetchProviders.mockResolvedValue({
       email: true,
       google: false,
-      apple: false,
       github: false,
     });
     renderMarquee();
@@ -108,7 +104,6 @@ describe("Marquee auth", () => {
     mockFetchProviders.mockResolvedValue({
       email: true,
       google: false,
-      apple: false,
       github: false,
     });
     renderMarquee();

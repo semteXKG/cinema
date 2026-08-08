@@ -27,7 +27,7 @@ describe("LoginConfirmedPage", () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     i18n.changeLanguage("en");
-    mockFetchProviders.mockResolvedValue({ email: true, google: false, apple: false, github: false });
+    mockFetchProviders.mockResolvedValue({ email: true, google: false, github: false });
   });
 
   it("shows the brand header and no showings content", async () => {

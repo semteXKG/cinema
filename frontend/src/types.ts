@@ -31,6 +31,5 @@ export interface AuthUser {
 export interface AuthProviders {
   email: boolean;
   google: boolean;
-  apple: boolean;
   github: boolean;
 }
