@@ -128,20 +128,6 @@ async fn main() -> anyhow::Result<()> {
             }),
             _ => None,
         },
-        apple_oauth: match (
-            &config.apple_client_id,
-            &config.apple_team_id,
-            &config.apple_key_id,
-            &config.apple_private_key,
-        ) {
-            (Some(id), Some(team_id), Some(key_id), Some(private_key)) => Some(web::AppleConfig {
-                client_id: id.clone(),
-                team_id: team_id.clone(),
-                key_id: key_id.clone(),
-                private_key: private_key.clone(),
-            }),
-            _ => None,
-        },
         github_oauth: match (&config.github_client_id, &config.github_client_secret) {
             (Some(id), Some(secret)) => Some(web::OAuthConfig {
                 client_id: id.clone(),

@@ -21,14 +21,6 @@ pub struct OAuthConfig {
 }
 
 #[derive(Clone)]
-pub struct AppleConfig {
-    pub client_id: String,
-    pub team_id: String,
-    pub key_id: String,
-    pub private_key: String,
-}
-
-#[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
     pub data_dir: PathBuf,
@@ -36,7 +28,6 @@ pub struct AppState {
     pub base_url: String,
     pub smtp_config: Option<SmtpConfig>,
     pub google_oauth: Option<OAuthConfig>,
-    pub apple_oauth: Option<AppleConfig>,
     pub github_oauth: Option<OAuthConfig>,
 }
 
@@ -432,7 +423,6 @@ mod tests {
             base_url: "http://localhost".into(),
             smtp_config: None,
             google_oauth: None,
-            apple_oauth: None,
             github_oauth: None,
         };
         let app = router(state);
@@ -521,7 +511,6 @@ mod tests {
             base_url: "http://localhost".into(),
             smtp_config: None,
             google_oauth: None,
-            apple_oauth: None,
             github_oauth: None,
         };
         let resp = router(state)
@@ -560,7 +549,6 @@ mod tests {
             base_url: "http://localhost".into(),
             smtp_config: None,
             google_oauth: None,
-            apple_oauth: None,
             github_oauth: None,
         };
         let app = router(state);
@@ -622,7 +610,6 @@ mod tests {
             base_url: "http://localhost".into(),
             smtp_config: None,
             google_oauth: None,
-            apple_oauth: None,
             github_oauth: None,
         };
         let resp = router(state)

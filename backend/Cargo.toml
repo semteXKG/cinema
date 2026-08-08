@@ -19,7 +19,6 @@ sha1 = "0.10"
 rand = "0.8"
 lettre = { version = "0.11", default-features = false, features = ["builder", "tokio1-rustls-tls", "smtp-transport"] }
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
-jsonwebtoken = "9"
 base64 = "0.22"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "chrono", "migrate", "macros"] }
 thiserror = "2"

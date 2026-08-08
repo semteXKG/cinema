@@ -19,10 +19,6 @@ pub struct Config {
     pub base_url: String,
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
-    pub apple_client_id: Option<String>,
-    pub apple_team_id: Option<String>,
-    pub apple_key_id: Option<String>,
-    pub apple_private_key: Option<String>,
     pub github_client_id: Option<String>,
     pub github_client_secret: Option<String>,
 }
@@ -81,10 +77,6 @@ impl Config {
             base_url: get("BASE_URL").unwrap_or_else(|| "https://cinema.k-labs.app".into()),
             google_client_id: get("GOOGLE_CLIENT_ID"),
             google_client_secret: get("GOOGLE_CLIENT_SECRET"),
-            apple_client_id: get("APPLE_CLIENT_ID"),
-            apple_team_id: get("APPLE_TEAM_ID"),
-            apple_key_id: get("APPLE_KEY_ID"),
-            apple_private_key: get("APPLE_PRIVATE_KEY"),
             github_client_id: get("GITHUB_CLIENT_ID"),
             github_client_secret: get("GITHUB_CLIENT_SECRET"),
         })
@@ -137,10 +129,6 @@ mod tests {
             ("BASE_URL", "http://localhost:8080"),
             ("GOOGLE_CLIENT_ID", "gcid"),
             ("GOOGLE_CLIENT_SECRET", "gcs"),
-            ("APPLE_CLIENT_ID", "acid"),
-            ("APPLE_TEAM_ID", "atid"),
-            ("APPLE_KEY_ID", "akid"),
-            ("APPLE_PRIVATE_KEY", "apk"),
             ("GITHUB_CLIENT_ID", "ghcid"),
             ("GITHUB_CLIENT_SECRET", "ghcs"),
         ]))
@@ -160,10 +148,6 @@ mod tests {
         assert_eq!(cfg.base_url, "http://localhost:8080");
         assert_eq!(cfg.google_client_id.as_deref(), Some("gcid"));
         assert_eq!(cfg.google_client_secret.as_deref(), Some("gcs"));
-        assert_eq!(cfg.apple_client_id.as_deref(), Some("acid"));
-        assert_eq!(cfg.apple_team_id.as_deref(), Some("atid"));
-        assert_eq!(cfg.apple_key_id.as_deref(), Some("akid"));
-        assert_eq!(cfg.apple_private_key.as_deref(), Some("apk"));
         assert_eq!(cfg.github_client_id.as_deref(), Some("ghcid"));
         assert_eq!(cfg.github_client_secret.as_deref(), Some("ghcs"));
     }
@@ -201,10 +185,6 @@ mod tests {
             ("SMTP_FROM", ""),
             ("GOOGLE_CLIENT_ID", ""),
             ("GOOGLE_CLIENT_SECRET", ""),
-            ("APPLE_CLIENT_ID", ""),
-            ("APPLE_TEAM_ID", ""),
-            ("APPLE_KEY_ID", ""),
-            ("APPLE_PRIVATE_KEY", ""),
             ("GITHUB_CLIENT_ID", ""),
             ("GITHUB_CLIENT_SECRET", ""),
             ("TELEGRAM_BOT_TOKEN", ""),
@@ -217,7 +197,6 @@ mod tests {
         assert_eq!(cfg.smtp_password, None);
         assert_eq!(cfg.smtp_from, None);
         assert_eq!(cfg.google_client_id, None);
-        assert_eq!(cfg.apple_team_id, None);
         assert_eq!(cfg.github_client_secret, None);
         assert_eq!(cfg.telegram_token, None);
     }

@@ -1,5 +1,5 @@
 use crate::db;
-use crate::web::{AppState, AppleConfig, OAuthConfig};
+use crate::web::{AppState, OAuthConfig};
 use axum::body::Body;
 use axum::extract::{FromRef, FromRequestParts, Query, State};
 use axum::http::request::Parts;
@@ -39,7 +39,6 @@ struct MeResponse {
 struct ProvidersResponse {
     email: bool,
     google: bool,
-    apple: bool,
     github: bool,
 }
 
@@ -298,7 +297,6 @@ async fn get_providers(State(state): State<AppState>) -> Json<ProvidersResponse>
     Json(ProvidersResponse {
         email: state.smtp_config.is_some(),
         google: state.google_oauth.is_some(),
-        apple: state.apple_oauth.is_some(),
         github: state.github_oauth.is_some(),
     })
 }
@@ -319,32 +317,8 @@ static OIDC_CLIENTS: OnceLock<Mutex<HashMap<String, Result<OidcClient, String>>>
 fn oidc_issuer(provider: &str) -> Result<String, StatusCode> {
     match provider {
         "google" => Ok("https://accounts.google.com".into()),
-        "apple" => Ok("https://appleid.apple.com".into()),
         _ => Err(StatusCode::NOT_FOUND),
     }
-}
-
-fn apple_client_secret(cfg: &AppleConfig) -> Result<String, StatusCode> {
-    // Apple's client_secret is a short-lived JWT signed with the registered private key
-    let now = Utc::now();
-    let exp = now + chrono::Duration::days(180);
-    let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
-    header.kid = Some(cfg.key_id.clone());
-    let claims = serde_json::json!({
-        "iss": cfg.team_id,
-        "iat": now.timestamp(),
-        "exp": exp.timestamp(),
-        "aud": "https://appleid.apple.com",
-        "sub": cfg.client_id,
-    });
-    let key = jsonwebtoken::EncodingKey::from_ec_pem(cfg.private_key.as_bytes()).map_err(|e| {
-        tracing::error!("invalid Apple private key: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    jsonwebtoken::encode(&header, &claims, &key).map_err(|e| {
-        tracing::error!("failed to sign Apple client secret: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
 }
 
 async fn oidc_client(state: &AppState, provider: &str) -> Result<OidcClient, StatusCode> {
@@ -355,13 +329,6 @@ async fn oidc_client(state: &AppState, provider: &str) -> Result<OidcClient, Sta
                 .as_ref()
                 .ok_or(StatusCode::NOT_IMPLEMENTED)?;
             (c.client_id.clone(), Some(c.client_secret.clone()))
-        }
-        "apple" => {
-            let c = state
-                .apple_oauth
-                .as_ref()
-                .ok_or(StatusCode::NOT_IMPLEMENTED)?;
-            (c.client_id.clone(), Some(apple_client_secret(c)?))
         }
         _ => return Err(StatusCode::NOT_FOUND),
     };
@@ -439,10 +406,6 @@ async fn sso_google(State(state): State<AppState>) -> Result<Response, StatusCod
     sso_initiate_oidc(&state, "google").await
 }
 
-async fn sso_apple(State(state): State<AppState>) -> Result<Response, StatusCode> {
-    sso_initiate_oidc(&state, "apple").await
-}
-
 async fn sso_github(State(state): State<AppState>) -> Result<Response, StatusCode> {
     let oauth = state
         .github_oauth
@@ -513,7 +476,7 @@ fn read_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
         })
 }
 
-// OIDC callback shared by Google and Apple. The id_token signature is verified
+// OIDC callback for Google. The id_token signature is verified
 // against the provider's JWKS and the nonce is checked.
 async fn sso_callback_oidc(
     state: &AppState,
@@ -566,7 +529,6 @@ async fn sso_callback_oidc(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let sub = claims.subject().to_string();
-    // Apple only returns email on the first login; store whatever we have.
     // Google: only use the email claim when the provider verified it.
     let email = if provider == "google" && claims.email_verified() != Some(true) {
         format!("{provider}-{sub}@unknown")
@@ -596,14 +558,6 @@ async fn sso_google_callback(
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Response, StatusCode> {
     sso_callback_oidc(&state, &headers, &params, "google").await
-}
-
-async fn sso_apple_callback(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Response, StatusCode> {
-    sso_callback_oidc(&state, &headers, &params, "apple").await
 }
 
 async fn sso_github_callback(
@@ -775,8 +729,6 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/auth/login/status", get(get_login_status))
         .route("/api/auth/sso/google", get(sso_google))
         .route("/api/auth/sso/google/callback", get(sso_google_callback))
-        .route("/api/auth/sso/apple", get(sso_apple))
-        .route("/api/auth/sso/apple/callback", get(sso_apple_callback))
         .route("/api/auth/sso/github", get(sso_github))
         .route("/api/auth/sso/github/callback", get(sso_github_callback))
         .route("/api/auth/me", get(get_me))
@@ -801,7 +753,6 @@ mod tests {
             base_url: "http://localhost:8080".into(),
             smtp_config: None,
             google_oauth: None,
-            apple_oauth: None,
             github_oauth: None,
         }
     }
@@ -823,7 +774,6 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["email"], false);
         assert_eq!(json["google"], false);
-        assert_eq!(json["apple"], false);
         assert_eq!(json["github"], false);
     }
 

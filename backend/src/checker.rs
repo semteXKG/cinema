@@ -343,10 +343,6 @@ mod tests {
             base_url: "https://cinema.k-labs.app".into(),
             google_client_id: None,
             google_client_secret: None,
-            apple_client_id: None,
-            apple_team_id: None,
-            apple_key_id: None,
-            apple_private_key: None,
             github_client_id: None,
             github_client_secret: None,
         }
