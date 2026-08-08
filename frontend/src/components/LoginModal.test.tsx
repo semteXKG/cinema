@@ -80,6 +80,15 @@ describe("LoginModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders provider logos in the SSO buttons", async () => {
+    renderModal();
+    await act(async () => {});
+    const google = screen.getByText("Sign in with Google").closest("button");
+    const github = screen.getByText("Sign in with GitHub").closest("button");
+    expect(google?.querySelector("svg")).not.toBeNull();
+    expect(github?.querySelector("svg")).not.toBeNull();
+  });
+
   it("shows the waiting state after email submit", async () => {
     vi.useFakeTimers();
     renderModal();
