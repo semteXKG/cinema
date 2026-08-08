@@ -17,6 +17,13 @@ and the Vite dev server:
 docker compose -f docker-compose.dev.yml up
 ```
 
+> First time on a fresh clone, install the frontend dependencies once first:
+> `cd frontend && npm install` (node_modules is gitignored and the dev stack
+> reuses the host copy).
+
+> The first `up` pulls the Rust image, installs `cargo-watch`, and does a full
+> compile before http://localhost:8080 responds — be patient.
+
 - Backend on http://localhost:8080, frontend on http://localhost:5173.
 - Backend recompiles via `cargo watch` on save; the frontend hot-reloads.
 - The backend's cargo `target/` lives in a named volume, so rebuilds stay

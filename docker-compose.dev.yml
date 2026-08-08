@@ -19,6 +19,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.dev
+    user: "${UID:-1000}:${GID:-1000}"
     working_dir: /build
     command: cargo watch -x run
     volumes:

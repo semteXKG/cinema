@@ -1,3 +1,5 @@
 FROM rust:1-slim-bookworm
-RUN cargo install cargo-watch --locked
+RUN cargo install cargo-watch --version 8.5.3 --locked && \
+    chmod -R a+rwX /usr/local/cargo
+RUN mkdir -p /build/target && chmod 1777 /build/target
 WORKDIR /build
