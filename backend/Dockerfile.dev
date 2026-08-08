@@ -1,0 +1,3 @@
+FROM rust:1-slim-bookworm
+RUN cargo install cargo-watch --locked
+WORKDIR /build
