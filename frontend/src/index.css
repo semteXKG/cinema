@@ -172,10 +172,10 @@
   padding:1.2rem 1.4rem;max-width:320px;width:100%;text-align:center;
   position:relative}
  .auth-provider{display:flex;align-items:center;justify-content:center;
-  gap:.6rem;width:100%;margin-top:.5rem;background:#fff;color:#3c4043;
-  border:1px solid #d0d4d9;border-radius:6px;padding:.5rem .8rem;
-  font-size:.85rem;font-weight:500;cursor:pointer}
- .auth-provider:hover{background:#f8f9fa;border-color:#b8bcc1}
+  gap:.6rem;width:100%;margin-top:.5rem;background:var(--panel);
+  border:1px solid var(--edge);color:var(--text);border-radius:6px;
+  padding:.5rem .8rem;font-size:.85rem;font-weight:500;cursor:pointer}
+ .auth-provider:hover{border-color:var(--gold);color:var(--gold)}
  .auth-provider svg{width:1.1rem;height:1.1rem;flex:0 0 auto}
  .modal-title{margin:0 0 .8rem;color:var(--gold);font-size:1.1rem}
  .modal-close{position:absolute;top:.4rem;right:.5rem;background:none;
