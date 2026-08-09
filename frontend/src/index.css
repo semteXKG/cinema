@@ -202,3 +202,13 @@
   display:flex;align-items:center;gap:.6rem}
  .modal-divider::before,.modal-divider::after{content:"";flex:1;
   height:1px;background:var(--edge)}
+ .pref-card h3{color:var(--gold);letter-spacing:.1em;text-transform:uppercase;
+  font-size:.85rem;margin:0 0 .3rem}
+ .pref-desc{color:var(--dim);font-size:.8rem;margin:0 0 .7rem;max-width:60ch}
+ .pref-field{display:flex;align-items:center;gap:.6rem;font-size:.85rem}
+ .pref-field span{color:var(--text)}
+ .pref-select{background:var(--bg);border:1px solid var(--edge);color:var(--text);
+  border-radius:4px;padding:.3rem .5rem;font-size:.8rem;cursor:pointer}
+ .pref-select:focus{outline:none;border-color:var(--gold)}
+ .pref-actions{display:flex;align-items:center;gap:.6rem;margin-top:1rem}
+ .pref-saved{color:var(--ok);font-size:.8rem}
