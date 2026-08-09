@@ -33,3 +33,18 @@ export interface AuthProviders {
   google: boolean;
   github: boolean;
 }
+
+export type NotificationFrequency =
+  | "never"
+  | "immediately"
+  | "1"
+  | "2"
+  | "3"
+  | "4"
+  | "5"
+  | "6"
+  | "7";
+
+export const FREQUENCY_OPTIONS: NotificationFrequency[] = [
+  "never", "immediately", "1", "2", "3", "4", "5", "6", "7",
+];

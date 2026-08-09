@@ -27,7 +27,8 @@
   },
   "nav": {
     "home": "Showings",
-    "impressum": "Impressum"
+    "impressum": "Impressum",
+    "preferences": "Preferences"
   },
   "sources": {
     "lastChecked": "Last checked"
@@ -39,5 +40,21 @@
     "email": "klaus.gradinger@gmail.com",
     "private": "Private, non-commercial hobby project.",
     "takedown": "Film data and poster images are taken from the cinemas' public websites. Content is removed promptly on short request."
+  },
+  "preferences": {
+    "title": "Notification preferences",
+    "email": "Email",
+    "emailDesc": "Get notified by email about new OV showings.",
+    "telegram": "Telegram",
+    "telegramDesc": "Get notified on Telegram. Link your account to activate.",
+    "frequency": "Frequency",
+    "frequencies": {
+      "never": "Never",
+      "immediately": "Immediately",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
+    },
+    "save": "Save",
+    "saved": "Saved"
   }
 }

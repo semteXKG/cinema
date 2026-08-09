@@ -27,7 +27,8 @@
   },
   "nav": {
     "home": "Vorstellungen",
-    "impressum": "Impressum"
+    "impressum": "Impressum",
+    "preferences": "Einstellungen"
   },
   "sources": {
     "lastChecked": "Zuletzt geprüft"
@@ -39,5 +40,21 @@
     "email": "klaus.gradinger@gmail.com",
     "private": "Privates, nicht-kommerzielles Hobbyprojekt.",
     "takedown": "Filmdaten und Plakatbilder stammen von den öffentlichen Webseiten der Kinos. Auf kurze Anfrage werden Inhalte umgehend entfernt."
+  },
+  "preferences": {
+    "title": "Benachrichtigungseinstellungen",
+    "email": "E-Mail",
+    "emailDesc": "Per E-Mail über neue OV-Vorstellungen informiert werden.",
+    "telegram": "Telegram",
+    "telegramDesc": "Auf Telegram benachrichtigt werden. Verknüpfe deinen Account, um es zu aktivieren.",
+    "frequency": "Häufigkeit",
+    "frequencies": {
+      "never": "Nie",
+      "immediately": "Sofort",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage"
+    },
+    "save": "Speichern",
+    "saved": "Gespeichert"
   }
 }
