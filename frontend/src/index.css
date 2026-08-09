@@ -41,9 +41,23 @@
  }
  .bulbs{
   height:10px;
-  background-image:radial-gradient(circle,var(--gold-bright) 1.6px,rgba(232,179,77,.15) 2.6px,transparent 3px);
-  background-size:22px 10px;background-position:center;background-repeat:repeat-x;
+  background-image:
+    radial-gradient(circle,#ffe9b8 2.2px,var(--gold-bright) 3.4px,rgba(245,197,107,.4) 5px,transparent 6px),
+    radial-gradient(circle,var(--gold-bright) 1.6px,rgba(232,179,77,.15) 2.6px,transparent 3px);
+  background-size:110px 10px,22px 10px;
+  background-position:0 center,0 center;
+  background-repeat:repeat-x;
   filter:drop-shadow(0 0 4px rgba(245,197,107,.8));
+  --bulb-chase:4s;
+  animation:bulb-chase var(--bulb-chase) steps(5,end) infinite;
+ }
+ .bulbs:last-child{animation-direction:reverse}
+ @keyframes bulb-chase{
+  0%{background-position-x:0}
+  100%{background-position-x:-110px}
+ }
+ @media (prefers-reduced-motion:reduce){
+  .bulbs{animation:none}
  }
  h2{
   color:var(--gold);font-size:.95rem;letter-spacing:.22em;
