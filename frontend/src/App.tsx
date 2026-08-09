@@ -2,6 +2,7 @@ import { Route, Routes, useSearchParams } from "react-router-dom";
 import { AuthProvider } from "./hooks/useAuth";
 import { ShowingsPage } from "./pages/ShowingsPage";
 import { ImpressumPage } from "./pages/ImpressumPage";
+import { PreferencesPage } from "./pages/PreferencesPage";
 import { LoginConfirmedPage } from "./pages/LoginConfirmedPage";
 import { InvalidLinkPage } from "./pages/InvalidLinkPage";
 
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ShowingsPage />} />
           <Route path="/impressum" element={<ImpressumPage />} />
+          <Route path="/preferences" element={<PreferencesPage />} />
         </Routes>
       )}
     </AuthProvider>

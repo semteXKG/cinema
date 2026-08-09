@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
@@ -25,11 +25,20 @@ const payload = {
   ],
 };
 
-function mockFetch(body: unknown) {
+function mockFetch(body: unknown, authed = false) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input).startsWith("/api/auth")) return { ok: false, status: 401 };
+      const url = String(input);
+      if (url.startsWith("/api/auth/me")) {
+        return authed
+          ? { ok: true, json: async () => ({ id: 1, email: "a@b.c" }) }
+          : { ok: false, status: 401 };
+      }
+      if (url.startsWith("/api/auth/providers")) {
+        return { ok: true, json: async () => ({ email: true, google: true, github: true }) };
+      }
+      if (url.startsWith("/api/auth")) return { ok: false, status: 401 };
       return { ok: true, json: async () => body };
     })
   );
@@ -91,5 +100,23 @@ describe("App", () => {
       await screen.findByText(/This sign-in link has expired or was already used/)
     ).toBeInTheDocument();
     expect(screen.queryByText("Impressum")).toBeNull();
+  });
+
+  it("hides the Preferences link when logged out", async () => {
+    mockFetch({ generatedAt: null, sources: {}, cinemas: [] });
+    renderAt("/");
+    await screen.findByRole("button", { name: "Sign in" });
+    expect(screen.queryByRole("link", { name: "Preferences" })).toBeNull();
+  });
+
+  it("shows the Preferences link and page when logged in", async () => {
+    mockFetch({ generatedAt: null, sources: {}, cinemas: [] }, true);
+    renderAt("/");
+    const link = await screen.findByRole("link", { name: "Preferences" });
+    expect(link).toHaveAttribute("href", "/preferences");
+    fireEvent.click(link);
+    expect(
+      await screen.findByRole("heading", { name: "Notification preferences" })
+    ).toBeInTheDocument();
   });
 });

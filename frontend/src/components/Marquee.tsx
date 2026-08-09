@@ -23,6 +23,7 @@ export function Marquee() {
       <nav className="marqnav">
         <NavLink to="/">{t("nav.home")}</NavLink>
         <NavLink to="/impressum">{t("nav.impressum")}</NavLink>
+        {user && <NavLink to="/preferences">{t("nav.preferences")}</NavLink>}
         <LanguageSwitcher />
         {!loading &&
           (!user ? (
