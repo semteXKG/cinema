@@ -40,8 +40,8 @@ State (local `useState`):
 - `saved: boolean` — set `true` on Save, cleared after 2s via `setTimeout`
   (cleanup on unmount).
 
-No API calls; uses `useAuth()` only if needed to read the user's email for the
-Email channel label (optional).
+No API calls; `useAuth()` is not needed — the channel cards use static
+translated titles/descriptions (the user's email is not shown).
 
 ### New: `frontend/src/types.ts` additions
 
