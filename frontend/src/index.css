@@ -163,7 +163,7 @@
   padding:.3rem .7rem;font-size:.75rem;font-weight:700;cursor:pointer;
   box-shadow:0 0 8px rgba(232,179,77,.35)}
  .auth-submit:hover{background:var(--gold-bright)}
- .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);
+ .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);
   display:flex;align-items:center;justify-content:center;z-index:100;
   padding:1rem}
  .modal{background:rgba(28,22,17,.72);backdrop-filter:blur(10px) saturate(1.2);
