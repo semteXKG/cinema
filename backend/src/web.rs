@@ -26,7 +26,6 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub static_dir: PathBuf,
     pub base_url: String,
-    #[allow(dead_code)]
     pub fake_login: bool,
     pub smtp_config: Option<SmtpConfig>,
     pub google_oauth: Option<OAuthConfig>,

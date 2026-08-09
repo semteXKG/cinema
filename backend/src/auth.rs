@@ -40,6 +40,7 @@ struct ProvidersResponse {
     email: bool,
     google: bool,
     github: bool,
+    dev: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +63,7 @@ const SESSION_COOKIE_NAME: &str = "ov_session";
 const SESSION_DAYS: i64 = 30;
 const STATE_COOKIE_NAME: &str = "ov_oauth_state";
 const PENDING_COOKIE_NAME: &str = "ov_pending";
+const DEV_EMAIL: &str = "dev@ov.local";
 
 async fn build_session_cookie(token: &str) -> String {
     format!(
@@ -293,11 +295,36 @@ async fn post_logout(State(state): State<AppState>, headers: HeaderMap) -> Respo
         .into_response()
 }
 
+async fn get_dev_login(State(state): State<AppState>) -> Result<Response, StatusCode> {
+    if !state.fake_login {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let user_id = db::find_or_create_user(&state.pool, "dev", DEV_EMAIL, DEV_EMAIL)
+        .await
+        .map_err(|e| {
+            tracing::error!("dev login: find_or_create_user failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    let session_token = new_token();
+    let expires = Utc::now() + chrono::Duration::days(SESSION_DAYS);
+    db::create_session(&state.pool, user_id, &session_token, expires)
+        .await
+        .map_err(|e| {
+            tracing::error!("dev login: create_session failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(redirect_to_with_cookie(
+        "/",
+        &build_session_cookie(&session_token).await,
+    ))
+}
+
 async fn get_providers(State(state): State<AppState>) -> Json<ProvidersResponse> {
     Json(ProvidersResponse {
         email: state.smtp_config.is_some(),
         google: state.google_oauth.is_some(),
         github: state.github_oauth.is_some(),
+        dev: state.fake_login,
     })
 }
 
@@ -731,6 +758,7 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/auth/sso/google/callback", get(sso_google_callback))
         .route("/api/auth/sso/github", get(sso_github))
         .route("/api/auth/sso/github/callback", get(sso_github_callback))
+        .route("/api/auth/dev-login", get(get_dev_login))
         .route("/api/auth/me", get(get_me))
         .route("/api/auth/logout", post(post_logout))
         .route("/api/auth/providers", get(get_providers))
@@ -758,6 +786,12 @@ mod tests {
         }
     }
 
+    fn test_state_dev(pool: PgPool) -> AppState {
+        let mut state = test_state(pool);
+        state.fake_login = true;
+        state
+    }
+
     #[sqlx::test(migrations = "./migrations")]
     async fn providers_endpoint(pool: PgPool) {
         let state = test_state(pool);
@@ -776,6 +810,84 @@ mod tests {
         assert_eq!(json["email"], false);
         assert_eq!(json["google"], false);
         assert_eq!(json["github"], false);
+        assert_eq!(json["dev"], false);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn providers_endpoint_reports_dev_login(pool: PgPool) {
+        let state = test_state_dev(pool);
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/providers")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["dev"], true);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn dev_login_disabled_returns_404(pool: PgPool) {
+        let state = test_state(pool);
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/dev-login")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn dev_login_creates_session_and_redirects(pool: PgPool) {
+        let state = test_state_dev(pool.clone());
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/dev-login")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 302);
+        assert_eq!(
+            resp.headers().get("location").unwrap().to_str().unwrap(),
+            "/"
+        );
+        let cookie = resp.headers().get("set-cookie").unwrap().to_str().unwrap();
+        let token = cookie
+            .strip_prefix("ov_session=")
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string();
+
+        // the minted session authenticates /api/auth/me
+        let state = test_state(pool);
+        let app = Router::new().merge(auth_router()).with_state(state);
+        let resp = app
+            .oneshot(
+                Request::get("/api/auth/me")
+                    .header("Cookie", format!("ov_session={token}"))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["email"], "dev@ov.local");
     }
 
     #[sqlx::test(migrations = "./migrations")]
