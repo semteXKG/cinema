@@ -81,7 +81,10 @@ impl Config {
             github_client_id: get("GITHUB_CLIENT_ID"),
             github_client_secret: get("GITHUB_CLIENT_SECRET"),
             fake_login: get("FAKE_LOGIN")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .map(|v| {
+                    let v = v.trim();
+                    v == "1" || v.eq_ignore_ascii_case("true")
+                })
                 .unwrap_or(false),
         })
     }
@@ -213,7 +216,7 @@ mod tests {
 
     #[test]
     fn fake_login_parses_enabled_values() {
-        for v in ["1", "true", "TRUE"] {
+        for v in ["1", "true", "TRUE", " 1 "] {
             let cfg = Config::from_lookup(env_of(&[
                 ("DATABASE_URL", "postgres://x"),
                 ("FAKE_LOGIN", v),

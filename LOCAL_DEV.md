@@ -169,6 +169,8 @@ on first use and sets the normal `ov_session` cookie (30 days).
   Production never sets it.
 - The dev-login redirects to `/` on the same host, so it works from both the
   Vite dev server (:5173) and the backend-served SPA (:8080).
+- The session cookie is `Secure`, so it only works on `localhost` over http —
+  use `http://localhost:5173` (or `http://localhost:8080`), not a LAN IP.
 
 ## Cluster Postgres (production)
 
