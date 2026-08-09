@@ -32,6 +32,7 @@ services:
       DATA_DIR: /data
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      FAKE_LOGIN: ${FAKE_LOGIN:-1}
     ports:
       - "8080:8080"
     depends_on:

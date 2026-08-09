@@ -149,6 +149,27 @@ export TELEGRAM_BOT_TOKEN=...
 export TELEGRAM_CHAT_ID=@ov_linz    # or any chat/channel id
 ```
 
+## Fake login (local development)
+
+No SMTP or SSO providers are configured on a local box, so the login modal has
+no working options. A dev-only endpoint mints a real session for a fixed dev
+user:
+
+```bash
+export FAKE_LOGIN=1    # dev compose stack defaults to 1 already
+```
+
+Restart the backend, open the app, click **Sign in**, then
+**Dev: sign in as dev@ov.local**. The backend creates the `dev@ov.local` user
+on first use and sets the normal `ov_session` cookie (30 days).
+
+- The login modal only shows the dev button when the backend reports it
+  (`GET /api/auth/providers` → `dev: true`).
+- `FAKE_LOGIN=0` or leaving it unset disables the endpoint (returns 404).
+  Production never sets it.
+- The dev-login redirects to `/` on the same host, so it works from both the
+  Vite dev server (:5173) and the backend-served SPA (:8080).
+
 ## Cluster Postgres (production)
 
 ```bash
