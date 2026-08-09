@@ -49,6 +49,8 @@
     "telegram": "Telegram",
     "telegramDesc": "Auf Telegram benachrichtigt werden. Verknüpfe deinen Account, um es zu aktivieren.",
     "frequency": "Häufigkeit",
+    "telegramHandle": "Telegram-Benutzername",
+    "telegramHandlePlaceholder": "@deinname",
     "frequencies": {
       "never": "Nie",
       "immediately": "Sofort",

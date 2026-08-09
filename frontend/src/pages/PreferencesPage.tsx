@@ -15,6 +15,7 @@ export function PreferencesPage() {
   const [emailFreq, setEmailFreq] = useState<NotificationFrequency>("immediately");
   const [telegramFreq, setTelegramFreq] = useState<NotificationFrequency>("never");
   const [saved, setSaved] = useState(false);
+  const [telegramHandle, setTelegramHandle] = useState("");
 
   useEffect(() => {
     if (!saved) return;
@@ -54,6 +55,19 @@ export function PreferencesPage() {
               ))}
             </select>
           </label>
+          {c.name === "telegram" && (
+            <label className="pref-field">
+              <span>{t("preferences.telegramHandle")}</span>
+              <input
+                className="pref-input"
+                type="text"
+                placeholder={t("preferences.telegramHandlePlaceholder")}
+                value={telegramHandle}
+                onChange={(e) => setTelegramHandle(e.target.value)}
+                aria-label={t("preferences.telegramHandle")}
+              />
+            </label>
+          )}
         </div>
       ))}
       <div className="pref-actions">

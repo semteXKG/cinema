@@ -64,4 +64,23 @@ describe("PreferencesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
+
+  it("shows the telegram handle input only in the telegram card", async () => {
+    mockAuthFetch();
+    renderPage();
+    await screen.findByRole("heading", { name: "Notification preferences" });
+    const emailCard = screen.getByRole("heading", { name: "Email" }).closest(".pref-card")! as HTMLElement;
+    const telegramCard = screen.getByRole("heading", { name: "Telegram" }).closest(".pref-card")! as HTMLElement;
+    expect(within(emailCard).queryByPlaceholderText("@yourhandle")).toBeNull();
+    expect(within(telegramCard).getByPlaceholderText("@yourhandle")).toBeInTheDocument();
+  });
+
+  it("updates the telegram handle as the user types", async () => {
+    mockAuthFetch();
+    renderPage();
+    await screen.findByRole("heading", { name: "Notification preferences" });
+    const input = screen.getByPlaceholderText("@yourhandle");
+    fireEvent.change(input, { target: { value: "@myhandle" } });
+    expect(input).toHaveValue("@myhandle");
+  });
 });

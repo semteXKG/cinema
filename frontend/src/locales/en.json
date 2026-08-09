@@ -49,6 +49,8 @@
     "telegram": "Telegram",
     "telegramDesc": "Get notified on Telegram. Link your account to activate.",
     "frequency": "Frequency",
+    "telegramHandle": "Telegram handle",
+    "telegramHandlePlaceholder": "@yourhandle",
     "frequencies": {
       "never": "Never",
       "immediately": "Immediately",

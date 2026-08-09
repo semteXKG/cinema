@@ -212,3 +212,7 @@
  .pref-select:focus{outline:none;border-color:var(--gold)}
  .pref-actions{display:flex;align-items:center;gap:.6rem;margin-top:1rem}
  .pref-saved{color:var(--ok);font-size:.8rem}
+ .pref-input{background:var(--bg);border:1px solid var(--edge);color:var(--text);
+  border-radius:4px;padding:.3rem .5rem;font-size:.8rem;width:200px}
+ .pref-input::placeholder{color:var(--faint)}
+ .pref-input:focus{outline:none;border-color:var(--gold)}
