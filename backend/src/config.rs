@@ -21,6 +21,7 @@ pub struct Config {
     pub google_client_secret: Option<String>,
     pub github_client_id: Option<String>,
     pub github_client_secret: Option<String>,
+    pub fake_login: bool,
 }
 
 impl Config {
@@ -79,6 +80,9 @@ impl Config {
             google_client_secret: get("GOOGLE_CLIENT_SECRET"),
             github_client_id: get("GITHUB_CLIENT_ID"),
             github_client_secret: get("GITHUB_CLIENT_SECRET"),
+            fake_login: get("FAKE_LOGIN")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         })
     }
 }
@@ -199,6 +203,42 @@ mod tests {
         assert_eq!(cfg.google_client_id, None);
         assert_eq!(cfg.github_client_secret, None);
         assert_eq!(cfg.telegram_token, None);
+    }
+
+    #[test]
+    fn fake_login_defaults_to_false() {
+        let cfg = Config::from_lookup(env_of(&[("DATABASE_URL", "postgres://x")])).unwrap();
+        assert!(!cfg.fake_login);
+    }
+
+    #[test]
+    fn fake_login_parses_enabled_values() {
+        for v in ["1", "true", "TRUE"] {
+            let cfg = Config::from_lookup(env_of(&[
+                ("DATABASE_URL", "postgres://x"),
+                ("FAKE_LOGIN", v),
+            ]))
+            .unwrap();
+            assert!(
+                cfg.fake_login,
+                "expected FAKE_LOGIN={v} to enable dev login"
+            );
+        }
+    }
+
+    #[test]
+    fn fake_login_parses_disabled_values() {
+        for v in ["0", "false", "yes", ""] {
+            let cfg = Config::from_lookup(env_of(&[
+                ("DATABASE_URL", "postgres://x"),
+                ("FAKE_LOGIN", v),
+            ]))
+            .unwrap();
+            assert!(
+                !cfg.fake_login,
+                "expected FAKE_LOGIN={v:?} to disable dev login"
+            );
+        }
     }
 
     #[test]

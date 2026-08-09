@@ -751,6 +751,7 @@ mod tests {
             data_dir: PathBuf::new(),
             static_dir: PathBuf::from("/nonexistent"),
             base_url: "http://localhost:8080".into(),
+            fake_login: false,
             smtp_config: None,
             google_oauth: None,
             github_oauth: None,

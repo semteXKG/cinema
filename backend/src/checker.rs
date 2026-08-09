@@ -345,6 +345,7 @@ mod tests {
             google_client_secret: None,
             github_client_id: None,
             github_client_secret: None,
+            fake_login: false,
         }
     }
 

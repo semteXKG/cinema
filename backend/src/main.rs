@@ -120,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
         data_dir: config.data_dir.clone(),
         static_dir: config.static_dir.clone(),
         base_url: config.base_url.clone(),
+        fake_login: config.fake_login,
         smtp_config,
         google_oauth: match (&config.google_client_id, &config.google_client_secret) {
             (Some(id), Some(secret)) => Some(web::OAuthConfig {
