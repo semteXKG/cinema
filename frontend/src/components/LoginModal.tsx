@@ -93,6 +93,16 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
             <span>{t("auth.signInWith", { provider: "GitHub" })}</span>
           </button>
         )}
+        {providers?.dev && (
+          <button
+            className="auth-provider"
+            onClick={() => {
+              window.location.href = "/api/auth/dev-login";
+            }}
+          >
+            <span>{t("auth.devLogin")}</span>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -32,6 +32,7 @@ export interface AuthProviders {
   email: boolean;
   google: boolean;
   github: boolean;
+  dev: boolean;
 }
 
 export type NotificationFrequency =

@@ -11,7 +11,8 @@
     "loggedIn": "Du bist angemeldet — du kannst dieses Fenster schließen.",
     "invalidLink": "Dieser Anmelde-Link ist abgelaufen oder wurde bereits verwendet. Bitte fordere einen neuen Link auf dem Gerät an, auf dem du dich anmelden möchtest.",
     "signInWith": "Anmelden mit {{provider}}",
-    "or": "oder"
+    "or": "oder",
+    "devLogin": "Dev: als dev@ov.local anmelden"
   },
   "sidebar": {
     "telegram": "Benachrichtigung über neue OV-Vorstellungen auf Telegram",

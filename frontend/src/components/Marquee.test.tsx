@@ -42,6 +42,7 @@ describe("Marquee auth", () => {
       email: true,
       google: true,
       github: false,
+      dev: false,
     });
     renderMarquee();
     await waitFor(() => {
@@ -55,6 +56,7 @@ describe("Marquee auth", () => {
       email: true,
       google: true,
       github: false,
+      dev: false,
     });
     renderMarquee();
     await waitFor(() => {
@@ -74,6 +76,7 @@ describe("Marquee auth", () => {
       email: true,
       google: false,
       github: false,
+      dev: false,
     });
     renderMarquee();
     await waitFor(() => {
@@ -87,6 +90,7 @@ describe("Marquee auth", () => {
       email: true,
       google: false,
       github: false,
+      dev: false,
     });
     renderMarquee();
     await waitFor(() => {
@@ -105,6 +109,7 @@ describe("Marquee auth", () => {
       email: true,
       google: false,
       github: false,
+      dev: false,
     });
     renderMarquee();
     await act(async () => {});

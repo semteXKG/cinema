@@ -35,6 +35,7 @@ describe("LoginModal", () => {
       email: true,
       google: true,
       github: true,
+      dev: false,
     });
     mockSendMagicLink.mockResolvedValue(undefined);
     mockFetchLoginStatus.mockResolvedValue(false);
@@ -42,6 +43,7 @@ describe("LoginModal", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("renders email form and config-driven SSO buttons", async () => {
@@ -98,5 +100,44 @@ describe("LoginModal", () => {
     });
     fireEvent.click(screen.getByText("Send link"));
     expect(screen.getByText(/waiting for confirmation/)).toBeInTheDocument();
+  });
+
+  it("shows the dev login button only when the backend enables it", async () => {
+    mockFetchProviders.mockResolvedValue({
+      email: true,
+      google: true,
+      github: true,
+      dev: true,
+    });
+    renderModal();
+    await act(async () => {});
+    expect(screen.getByText("Dev: sign in as dev@ov.local")).toBeInTheDocument();
+  });
+
+  it("hides the dev login button when dev login is disabled", async () => {
+    mockFetchProviders.mockResolvedValue({
+      email: true,
+      google: true,
+      github: true,
+      dev: false,
+    });
+    renderModal();
+    await act(async () => {});
+    expect(screen.queryByText("Dev: sign in as dev@ov.local")).toBeNull();
+  });
+
+  it("navigates to the dev-login endpoint when clicked", async () => {
+    const locationStub = { href: "" };
+    vi.stubGlobal("location", locationStub);
+    mockFetchProviders.mockResolvedValue({
+      email: true,
+      google: true,
+      github: true,
+      dev: true,
+    });
+    renderModal();
+    await act(async () => {});
+    fireEvent.click(screen.getByText("Dev: sign in as dev@ov.local"));
+    expect(locationStub.href).toBe("/api/auth/dev-login");
   });
 });

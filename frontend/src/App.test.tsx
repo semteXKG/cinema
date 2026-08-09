@@ -36,7 +36,7 @@ function mockFetch(body: unknown, authed = false) {
           : { ok: false, status: 401 };
       }
       if (url.startsWith("/api/auth/providers")) {
-        return { ok: true, json: async () => ({ email: true, google: true, github: true }) };
+        return { ok: true, json: async () => ({ email: true, google: true, github: true, dev: false }) };
       }
       if (url.startsWith("/api/auth")) return { ok: false, status: 401 };
       return { ok: true, json: async () => body };

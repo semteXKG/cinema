@@ -14,7 +14,7 @@ function mockAuthFetch() {
         return { ok: true, json: async () => ({ id: 1, email: "a@b.c" }) };
       }
       if (url.startsWith("/api/auth/providers")) {
-        return { ok: true, json: async () => ({ email: true, google: true, github: true }) };
+        return { ok: true, json: async () => ({ email: true, google: true, github: true, dev: false }) };
       }
       return { ok: false, status: 404 };
     })

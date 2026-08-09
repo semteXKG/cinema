@@ -11,7 +11,8 @@
     "loggedIn": "You have been logged in — you can close this window.",
     "invalidLink": "This sign-in link has expired or was already used. Please request a new one on the device where you want to sign in.",
     "signInWith": "Sign in with {{provider}}",
-    "or": "or"
+    "or": "or",
+    "devLogin": "Dev: sign in as dev@ov.local"
   },
   "sidebar": {
     "telegram": "Get notified about new OV showings on Telegram",
