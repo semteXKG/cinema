@@ -551,60 +551,48 @@ git commit -m "feat: preferences API endpoints"
 
 - [ ] **Step 1: Write failing email notifier test**
 
-Use a local plaintext SMTP capture server (similar to existing `mailer_speaks_starttls_not_implicit_tls` test).
+NOTE: A live SMTP test is impractical here because the mailer uses STARTTLS
+(pipeline needs EHLO capabilities → STARTTLS → TLS handshake, which a plain TCP
+capture server cannot satisfy). Instead, factor the message construction into
+`build_message` and test it directly (mirroring the existing
+`login_email_has_context_and_expiry` pattern in `auth.rs`, which inspects
+`Message::formatted()`). The network `send` is exercised manually/prod.
 
 ```rust
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::{Arc, Mutex};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use super::Message;
 
-    async fn spawn_smtp_capture() -> (std::net::SocketAddr, Arc<Mutex<String>>) {
-        let captured = Arc::new(Mutex::new(String::new()));
-        let cap = captured.clone();
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            let (mut sock, _) = listener.accept().await.unwrap();
-            let _ = sock.write_all(b"220 test ESMTP\r\n").await;
-            let mut buf = [0u8; 1024];
-            while let Ok(n) = sock.read(&mut buf).await {
-                if n == 0 { break; }
-                let text = String::from_utf8_lossy(&buf[..n]);
-                cap.lock().unwrap().push_str(&text);
-                if text.contains("QUIT") { break; }
-                let _ = sock.write_all(b"250 OK\r\n").await;
-            }
-        });
-        (addr, captured)
+    fn build_test_email() -> Result<Message, anyhow::Error> {
+        let notifier = EmailNotifier::new_unchecked("showings@example.com");
+        notifier.build_message("user@example.com", "Subject", "<b>hi</b>")
     }
 
-    fn build_test_mailer(addr: &std::net::SocketAddr) -> AsyncSmtpTransport<Tokio1Executor> {
-        use lettre::transport::smtp::authentication::Credentials;
-        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&addr.ip().to_string())
-            .unwrap()
-            .port(addr.port())
-            .credentials(Credentials::new("user".into(), "pass".into()))
-            .build()
-    }
-
-    #[tokio::test]
-    async fn email_notifier_sends_html() {
-        let (addr, captured) = spawn_smtp_capture().await;
-        let mailer = build_test_mailer(&addr);
-        let notifier = EmailNotifier::new(mailer, "showings@example.com".into());
-        notifier.send("user@example.com", "Subject", "<b>hi</b>").await.unwrap();
-        let data = captured.lock().unwrap();
-        assert!(data.contains("To: user@example.com"));
-        assert!(data.contains("From: showings@example.com"));
-        assert!(data.contains("<b>hi</b>"));
+    #[test]
+    fn builds_html_email_with_expected_headers() {
+        let msg = build_test_email().unwrap();
+        let headers = msg.headers().to_string();
+        let body = String::from_utf8_lossy(&msg.formatted().to_vec()).to_string();
+        // Content-Type text/html (present in the header string)
+        assert!(headers.to_lowercase().contains("content-type: text/html"));
+        // From / To present (addresses may be quoted-printable encoded in headers)
+        assert!(headers.contains("showings@example.com"));
+        assert!(headers.contains("user@example.com"));
+        assert!(msg.subject().contains("Subject"));
+        // raw HTML appears somewhere in the encoded body
+        assert!(body.contains("<b>hi</b>"));
     }
 }
 ```
 
-Run: `cd backend && cargo test notification::send::tests::email_notifier_sends_html -- --nocapture`
+Note: `EmailNotifier::new_unchecked` is a test-only constructor taking only the
+from address (it does not need a transport); `build_message` takes
+`&self, to, subject, html`. The assertion on `ContentType` and header presence
+verifies behavior; adjust decoding if lettre's quoted-printable mangling hides
+the HTML (in that case assert on a substring that survives encoding, and note it
+in the report).
+
+Run: `cd backend && cargo test notification::send::tests::builds_html_email_with_expected_headers -- --nocapture`
 
 Expected: compile errors.
 
@@ -614,27 +602,45 @@ Expected: compile errors.
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 pub struct EmailNotifier {
-    mailer: AsyncSmtpTransport<Tokio1Executor>,
+    mailer: Option<AsyncSmtpTransport<Tokio1Executor>>,
     from: String,
 }
 
 impl EmailNotifier {
-    pub fn new(mailer: AsyncSmtpTransport<Tokio1Executor>, from: String) -> Self { ... }
+    pub fn new(mailer: AsyncSmtpTransport<Tokio1Executor>, from: String) -> Self {
+        EmailNotifier { mailer: Some(mailer), from }
+    }
 
-    pub async fn send(&self, to: &str, subject: &str, html: &str) -> anyhow::Result<()> {
-        let email = Message::builder()
+    #[cfg(test)]
+    fn new_unchecked(from: String) -> Self {
+        EmailNotifier { mailer: None, from }
+    }
+
+    fn build_message(
+        &self,
+        to: &str,
+        subject: &str,
+        html: &str,
+    ) -> anyhow::Result<Message> {
+        Ok(Message::builder()
             .from(self.from.parse()?)
             .to(to.parse()?)
             .subject(subject)
-            .header(lettre::message::header::ContentType::TEXT_HTML)
-            .body(html.to_string())?;
-        self.mailer.send(email).await?;
+            .header(ContentType::TEXT_HTML)
+            .body(html.to_string())?)
+    }
+
+    pub async fn send(&self, to: &str, subject: &str, html: &str) -> anyhow::Result<()> {
+        let email = self.build_message(to, subject, html)?;
+        let mailer = self.mailer.as_ref().ok_or_else(|| anyhow::anyhow!("email notifier has no transport"))?;
+        mailer.send(email).await?;
         Ok(())
     }
 }
 ```
 
-Add `notification_email_from: Option<String>` to `Config`, defaulting to `showings@<base_url_domain>` when unset.
+Add `notification_email_from: Option<String>` to `Config`, defaulting to
+`showings@<base_url_domain>` when unset.
 
 - [ ] **Step 3: Run email notifier tests**
 
@@ -645,7 +651,7 @@ Expected: tests pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/src/notification/send.rs backend/src/config.rs backend/src/web.rs
+git add backend/src/notification/send.rs backend/src/notification/mod.rs backend/src/config.rs
 git commit -m "feat: email notifier for notification batches"
 ```
 
