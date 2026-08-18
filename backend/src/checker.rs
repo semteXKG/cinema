@@ -260,6 +260,7 @@ pub async fn run_check(ctx: &CheckCtx<'_>, now: DateTime<Utc>) -> anyhow::Result
         email: ctx.email,
         telegram: ctx.telegram,
         base_url: &ctx.config.base_url,
+        max_retry_age_hours: ctx.config.notification_max_retry_age_hours,
     };
     crate::notification::batch::process_due_batches(&batch_ctx, now).await?;
 

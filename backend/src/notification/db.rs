@@ -223,6 +223,23 @@ pub async fn mark_batch_failed(pool: &PgPool, batch_id: i64, error: &str) -> sql
     Ok(())
 }
 
+pub async fn gc_failed_batches(
+    pool: &PgPool,
+    max_retry_age_hours: u64,
+    now: DateTime<Utc>,
+) -> sqlx::Result<u64> {
+    Ok(sqlx::query(
+        "DELETE FROM notification_batch
+          WHERE status = 'failed'
+            AND updated_at + make_interval(hours => $1::int) <= $2",
+    )
+    .bind(max_retry_age_hours as i64)
+    .bind(now)
+    .execute(pool)
+    .await?
+    .rows_affected())
+}
+
 pub async fn create_empty_batch(pool: &PgPool, user_id: i64, layer: &str) -> sqlx::Result<i64> {
     let row: (i64,) = sqlx::query_as(
         "INSERT INTO notification_batch (user_id, layer) VALUES ($1, $2) RETURNING id",

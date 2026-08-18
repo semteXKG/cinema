@@ -38,6 +38,7 @@ pub struct BatchCtx<'a> {
     pub email: Option<&'a dyn EmailSender>,
     pub telegram: Option<&'a dyn TelegramSender>,
     pub base_url: &'a str,
+    pub max_retry_age_hours: u64,
 }
 
 pub async fn append_showing_for_users(
@@ -62,6 +63,7 @@ pub async fn append_showing_for_users(
 }
 
 pub async fn process_due_batches(ctx: &BatchCtx<'_>, now: DateTime<Utc>) -> anyhow::Result<usize> {
+    db::gc_failed_batches(ctx.pool, ctx.max_retry_age_hours, now).await?;
     let batches = db::get_due_batches(ctx.pool, now).await?;
     let mut sent = 0usize;
     for batch in batches {
@@ -381,6 +383,7 @@ mod tests {
             email,
             telegram,
             base_url: "https://cinema.k-labs.app",
+            max_retry_age_hours: 168,
         }
     }
 
@@ -638,5 +641,53 @@ mod tests {
         assert_eq!(sent, 1);
         assert_eq!(batch_status(&pool, batch_id).await, "sent");
         assert_eq!(tg.sent.lock().unwrap().len(), 1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn gc_deletes_failed_batch_older_than_max_retry_age(pool: PgPool) {
+        let uid = make_user(&pool, "k@x.com").await;
+        let old_failed = create_failed_batch(&pool, uid, "email", at(10, 0)).await;
+        let recent_failed = create_failed_batch(&pool, uid, "telegram", at(18, 10)).await;
+
+        let deleted = crate::notification::db::gc_failed_batches(&pool, 168, at(18, 12))
+            .await
+            .unwrap();
+        assert_eq!(deleted, 1);
+
+        let (old_count,): (i64,) =
+            sqlx::query_as("SELECT count(*) FROM notification_batch WHERE id = $1")
+                .bind(old_failed)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(old_count, 0);
+        let (recent_count,): (i64,) =
+            sqlx::query_as("SELECT count(*) FROM notification_batch WHERE id = $1")
+                .bind(recent_failed)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(recent_count, 1);
+    }
+
+    async fn create_failed_batch(
+        pool: &PgPool,
+        uid: i64,
+        layer: &str,
+        updated_at: DateTime<Utc>,
+    ) -> i64 {
+        let batch_id = crate::notification::db::create_empty_batch(pool, uid, layer)
+            .await
+            .unwrap();
+        crate::notification::db::mark_batch_failed(pool, batch_id, "boom")
+            .await
+            .unwrap();
+        sqlx::query("UPDATE notification_batch SET updated_at = $2 WHERE id = $1")
+            .bind(batch_id)
+            .bind(updated_at)
+            .execute(pool)
+            .await
+            .unwrap();
+        batch_id
     }
 }
