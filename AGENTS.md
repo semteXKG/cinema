@@ -10,7 +10,10 @@ Rust backend (axum + sqlx/Postgres), React frontend, deployed via GitHub Actions
 - `backend/` — Rust/axum: `models.rs`, `fetchers/` (cineplexx, megaplex),
   `checker.rs` (dedup/pruning + check orchestration), `notify.rs` (Telegram),
   `ics.rs` (calendar feed), `db.rs` (sqlx; migrations in `backend/migrations/`),
-  `web.rs` (API + static files), `main.rs` (scheduler loop + web server).
+  `web.rs` (API + static files), `main.rs` (scheduler loop + web server),
+  `notification/` (batching engine + preferences API at `/api/preferences`,
+  Telegram verification webhook at `/api/telegram/webhook/{secret}`; schemas
+  in migrations `0002_users.sql` and `0003_notifications.sql`).
 - `frontend/` — React 19 + Vite + TypeScript; dev server proxies
   `/api`, `/healthz`, `/showings.ics`, `/posters`.
 - `helm/ov-watcher/` — production chart: Deployment + Postgres StatefulSet +
@@ -24,7 +27,10 @@ State in Postgres; posters cached on the app PVC under `DATA_DIR/posters/`.
 
 Env vars (`backend/src/config.rs`): `DATABASE_URL` (required), `DATA_DIR`,
 `STATIC_DIR`, `PORT`, `CHECK_INTERVAL_HOURS`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_CHAT_ID`, `SOURCES`.
+`TELEGRAM_CHAT_ID`, `SOURCES`, `TELEGRAM_WEBHOOK_SECRET` (optional; enables the
+Telegram verification webhook — the operator must set the GitHub secret and
+register the bot webhook), `NOTIFICATION_EMAIL_FROM` (optional sender override),
+`NOTIFICATION_MAX_RETRY_AGE_HOURS` (default 168).
 
 ## Running locally
 

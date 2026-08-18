@@ -10,6 +10,8 @@ pub struct NotificationPreferences {
     pub telegram_chat_id: Option<String>,
     pub digest_anchor: DateTime<Utc>,
     pub digest_hour: i32,
+    // mapped DB column returned by SELECTs, not yet consumed by non-test code
+    #[allow(dead_code)]
     pub updated_at: DateTime<Utc>,
 }
 
@@ -31,6 +33,8 @@ pub struct DueBatch {
     pub digest_anchor: DateTime<Utc>,
     pub digest_hour: i32,
     pub created_at: DateTime<Utc>,
+    // mapped DB column, currently read only by tests
+    #[allow(dead_code)]
     pub error_count: i32,
 }
 

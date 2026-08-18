@@ -35,12 +35,12 @@ pub fn next_digest_after(
         .single()?
         .with_timezone(&Utc);
     if candidate < anchor {
-        candidate = candidate + Duration::days(1);
+        candidate += Duration::days(1);
     }
     // step forward by frequency_days until strictly after `t`
     let step = Duration::days(frequency_days.max(1) as i64);
     while candidate <= t {
-        candidate = candidate + step;
+        candidate += step;
     }
     Some(candidate)
 }
