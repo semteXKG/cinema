@@ -828,19 +828,74 @@ git commit -m "feat: notification batching engine"
 - [ ] **Step 1: Write failing webhook test**
 
 ```rust
-#[sqlx::test(migrations = "./migrations")]
-async fn webhook_verifies_handle_and_stores_chat_id(pool: PgPool) {
-    let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com").await.unwrap();
-    crate::notification::db::upsert_preferences(&pool, uid, PreferenceUpdate {
-        email_frequency: None,
-        telegram_frequency: Some("immediately".into()),
-        telegram_handle: Some("myhandle".into()),
-        digest_anchor: None,
-        digest_hour: None,
-    }).await.unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::web::AppState;
+    use axum::body::to_bytes;
+    use axum::http::Request;
+    use axum::http::StatusCode;
+    use sqlx::PgPool;
+    use std::path::PathBuf;
+    use tower::ServiceExt;
 
-    // POST mock Telegram update to webhook
-    // assert chat_id stored
+    fn test_state(pool: PgPool) -> AppState {
+        AppState {
+            pool,
+            data_dir: PathBuf::new(),
+            static_dir: PathBuf::from("/nonexistent"),
+            base_url: "http://localhost:8080".into(),
+            fake_login: false,
+            smtp_config: None,
+            google_oauth: None,
+            github_oauth: None,
+            telegram_webhook_secret: Some("supersecret".into()),
+        }
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn webhook_verifies_handle_and_stores_chat_id(pool: PgPool) {
+        let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com").await.unwrap();
+        crate::notification::db::upsert_preferences(&pool, uid, crate::notification::db::PreferenceUpdate {
+            email_frequency: None,
+            telegram_frequency: Some("immediately".into()),
+            telegram_handle: Some("myhandle".into()),
+            digest_anchor: None,
+            digest_hour: None,
+        }).await.unwrap();
+
+        let app = crate::web::router(test_state(pool.clone()));
+        // matching handle with wrong chat_id previously None
+        let resp = app
+            .oneshot(
+                Request::post("/api/telegram/webhook/supersecret")
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from(
+                        r#"{"update_id":1,"message":{"message_id":1,"from":{"id":99,"username":"MyHandle"},"chat":{"id":12345}}}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let prefs = crate::notification::db::get_preferences(&pool, uid).await.unwrap();
+        assert_eq!(prefs.telegram_chat_id.as_deref(), Some("12345"));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn webhook_rejects_wrong_secret(pool: PgPool) {
+        let app = crate::web::router(test_state(pool));
+        let resp = app
+            .oneshot(
+                Request::post("/api/telegram/webhook/wrong")
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
 }
 ```
 
@@ -851,27 +906,73 @@ Expected: compile errors.
 - [ ] **Step 2: Implement webhook handler**
 
 ```rust
+use crate::web::AppState;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::routing;
+use axum::Json;
+use axum::Router;
+
 pub fn telegram_webhook_router() -> Router<AppState> {
-    Router::new()
-        .route("/api/telegram/webhook/:secret", routing::post(post_webhook))
+    Router::new().route(
+        "/api/telegram/webhook/:secret",
+        routing::post(post_webhook),
+    )
+}
+
+pub fn normalize_handle(handle: &str) -> String {
+    handle.trim().trim_start_matches('@').to_lowercase()
 }
 
 async fn post_webhook(
     State(state): State<AppState>,
     Path(secret): Path<String>,
     Json(update): Json<serde_json::Value>,
-) -> StatusCode { ... }
+) -> StatusCode {
+    if state.telegram_webhook_secret.as_deref() != Some(secret.as_str()) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    let username = update
+        .pointer("/message/from/username")
+        .and_then(|v| v.as_str());
+    let chat_id = update.pointer("/message/chat/id").and_then(|v| v.as_i64());
+    let (Some(username), Some(chat_id)) = (username, chat_id) else {
+        // Missing fields: still 200 so Telegram stops retrying this update.
+        return StatusCode::OK;
+    };
+    let handle = normalize_handle(username);
+    let updated = sqlx::query(
+        "UPDATE notification_preferences
+            SET telegram_chat_id = $1, updated_at = now()
+          WHERE telegram_handle = $2 AND telegram_chat_id IS NULL",
+    )
+    .bind(chat_id.to_string())
+    .bind(&handle)
+    .execute(&state.pool)
+    .await;
+    match updated {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("telegram webhook update failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
 ```
 
-- Reject with `401` if `state.telegram_webhook_secret.as_deref() != Some(secret.as_str())`.
-- Extract `update.message.from.username` and `update.message.chat.id`.
-- Normalize username.
-- Update matching preference row with `telegram_chat_id`.
-- Return `200 OK` (Telegram expects 200).
+- `normalize_handle` strips leading `@` and lowercases; the webhook normalizes the
+  incoming username so it matches the stored handle.
+- The `UPDATE ... WHERE telegram_handle = $2 AND telegram_chat_id IS NULL` limit
+  means a verified handle is not overwritten by a later message (idempotence).
+- Always return `200 OK` for a valid secret + well-formed update (Telegram
+  retries non-200 with backoff); only a DB error returns 500.
 
 - [ ] **Step 3: Mount router and add AppState field**
 
-Add `telegram_webhook_secret: Option<String>` to `AppState` (all `AppState { ... }` literals in tests get `telegram_webhook_secret: None,`). Mount the webhook router in `web.rs`:
+Add `telegram_webhook_secret: Option<String>` to `AppState`. Update EVERY
+`AppState { ... }` literal: test helpers in `web.rs` and `auth.rs` get
+`telegram_webhook_secret: None,`, and `main.rs` sets it from `config`.
+Mount the webhook router in `web.rs`:
 
 ```rust
 .merge(crate::notification::telegram_webhook_router())
@@ -879,16 +980,17 @@ Add `telegram_webhook_secret: Option<String>` to `AppState` (all `AppState { ...
 
 The `Config` field and env parsing are added in Task 12.
 
-- [ ] **Step 4: Run webhook tests**
+- [ ] **Step 4: Run webhook tests + full suite**
 
 Run: `cd backend && cargo test notification::verify -- --nocapture`
+Then: `cargo test` (must compile — every AppState literal updated).
 
 Expected: tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/notification/verify.rs backend/src/notification/mod.rs backend/src/web.rs backend/src/config.rs
+git add backend/src/notification/verify.rs backend/src/notification/mod.rs backend/src/web.rs backend/src/main.rs
 git commit -m "feat: telegram handle verification webhook"
 ```
 
