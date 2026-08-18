@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, NaiveTime, Utc};
 use chrono_tz::Europe::Vienna;
 
 pub enum Frequency {
@@ -14,7 +14,7 @@ pub fn parse_frequency(value: &str) -> Option<Frequency> {
         n => n
             .parse::<i32>()
             .ok()
-            .filter(|&d| d >= 1 && d <= 7)
+            .filter(|&d| (1..=7).contains(&d))
             .map(Frequency::Days),
     }
 }
@@ -48,6 +48,7 @@ pub fn next_digest_after(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     fn at(day: u32, hour: u32) -> DateTime<Utc> {
         Vienna
