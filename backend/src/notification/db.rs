@@ -178,7 +178,7 @@ pub async fn get_due_batches(pool: &PgPool, now: DateTime<Utc>) -> sqlx::Result<
          LEFT JOIN notification_preferences p ON p.user_id = b.user_id
          WHERE b.status = 'pending'
             OR (b.status = 'failed'
-                AND b.updated_at + make_interval(hours => LEAST(POWER(2, b.error_count)::int, 24)) <= $1)
+                AND b.updated_at + make_interval(hours => LEAST(POWER(2, LEAST(b.error_count, 5))::int, 24)) <= $1)
          ORDER BY b.id",
     )
     .bind(now)
@@ -647,5 +647,22 @@ mod tests {
         let failed_batch = due.iter().find(|d| d.batch_id == retry_failed).unwrap();
         assert_eq!(failed_batch.frequency, "never");
         assert_eq!(failed_batch.error_count, 1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn get_due_batches_high_error_count_retryable_without_overflow(pool: PgPool) {
+        let uid = make_user(&pool, "j@x.com").await;
+        let row: (i64,) = sqlx::query_as(
+            "INSERT INTO notification_batch (user_id, layer, status, error_count, updated_at)
+             VALUES ($1, 'email', 'failed', 40, now() - interval '25 hours')
+             RETURNING id",
+        )
+        .bind(uid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let batch_id = row.0;
+        let due = get_due_batches(&pool, Utc::now()).await.unwrap();
+        assert!(due.iter().any(|d| d.batch_id == batch_id));
     }
 }
