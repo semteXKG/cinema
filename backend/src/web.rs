@@ -30,6 +30,7 @@ pub struct AppState {
     pub smtp_config: Option<SmtpConfig>,
     pub google_oauth: Option<OAuthConfig>,
     pub github_oauth: Option<OAuthConfig>,
+    pub telegram_webhook_secret: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -84,6 +85,7 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .merge(crate::auth::auth_router())
         .merge(crate::notification::preferences_router())
+        .merge(crate::notification::telegram_webhook_router())
         .fallback_service(
             ServeDir::new(&state.static_dir)
                 .fallback(ServeFile::new(state.static_dir.join("index.html"))),
@@ -427,6 +429,7 @@ mod tests {
             smtp_config: None,
             google_oauth: None,
             github_oauth: None,
+            telegram_webhook_secret: None,
         };
         let app = router(state);
         // state 1: no check run yet -> nulls
@@ -516,6 +519,7 @@ mod tests {
             smtp_config: None,
             google_oauth: None,
             github_oauth: None,
+            telegram_webhook_secret: None,
         };
         let resp = router(state)
             .oneshot(
@@ -555,6 +559,7 @@ mod tests {
             smtp_config: None,
             google_oauth: None,
             github_oauth: None,
+            telegram_webhook_secret: None,
         };
         let app = router(state);
         let resp = app
@@ -617,6 +622,7 @@ mod tests {
             smtp_config: None,
             google_oauth: None,
             github_oauth: None,
+            telegram_webhook_secret: None,
         };
         let resp = router(state)
             .oneshot(

@@ -783,6 +783,7 @@ mod tests {
             smtp_config: None,
             google_oauth: None,
             github_oauth: None,
+            telegram_webhook_secret: None,
         }
     }
 

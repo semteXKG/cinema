@@ -329,6 +329,7 @@ mod tests {
         Config {
             telegram_token: telegram.then(|| "T".to_string()),
             telegram_chat_id: telegram.then(|| "C".to_string()),
+            telegram_webhook_secret: None,
             sources: vec!["cineplexx".into()],
             check_interval: std::time::Duration::ZERO,
             data_dir: data_dir.to_path_buf(),

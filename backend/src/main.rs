@@ -137,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
             }),
             _ => None,
         },
+        telegram_webhook_secret: config.telegram_webhook_secret.clone(),
     };
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!("starting web server on port {}", config.port);

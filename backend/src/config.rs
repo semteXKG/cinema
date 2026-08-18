@@ -5,6 +5,7 @@ use std::time::Duration;
 pub struct Config {
     pub telegram_token: Option<String>,
     pub telegram_chat_id: Option<String>,
+    pub telegram_webhook_secret: Option<String>,
     pub sources: Vec<String>,
     pub check_interval: Duration,
     pub data_dir: PathBuf,
@@ -63,6 +64,7 @@ impl Config {
         Ok(Config {
             telegram_token: get("TELEGRAM_BOT_TOKEN"),
             telegram_chat_id: get("TELEGRAM_CHAT_ID"),
+            telegram_webhook_secret: get("TELEGRAM_WEBHOOK_SECRET"),
             sources,
             check_interval: Duration::from_secs_f64(hours * 3600.0),
             data_dir: PathBuf::from(get("DATA_DIR").unwrap_or_else(|| "./data".into())),
@@ -114,6 +116,7 @@ mod tests {
         assert_eq!(cfg.static_dir, PathBuf::from("./frontend/dist"));
         assert_eq!(cfg.port, 8080);
         assert_eq!(cfg.telegram_token, None);
+        assert_eq!(cfg.telegram_webhook_secret, None);
         assert_eq!(cfg.smtp_port, 587);
         assert_eq!(cfg.smtp_host, None);
         assert_eq!(cfg.smtp_from, None);
@@ -128,6 +131,7 @@ mod tests {
             ("DATABASE_URL", "postgres://x"),
             ("TELEGRAM_BOT_TOKEN", "T"),
             ("TELEGRAM_CHAT_ID", "@ov_linz"),
+            ("TELEGRAM_WEBHOOK_SECRET", "whsec"),
             ("SOURCES", "cineplexx, megaplex,"),
             ("CHECK_INTERVAL_HOURS", "1.5"),
             ("DATA_DIR", "/data"),
@@ -146,6 +150,7 @@ mod tests {
         .unwrap();
         assert_eq!(cfg.telegram_token.as_deref(), Some("T"));
         assert_eq!(cfg.telegram_chat_id.as_deref(), Some("@ov_linz"));
+        assert_eq!(cfg.telegram_webhook_secret.as_deref(), Some("whsec"));
         assert_eq!(cfg.sources, vec!["cineplexx", "megaplex"]);
         assert_eq!(cfg.check_interval, Duration::from_secs(5400));
         assert_eq!(cfg.data_dir, PathBuf::from("/data"));
@@ -205,6 +210,7 @@ mod tests {
             ("GITHUB_CLIENT_SECRET", ""),
             ("TELEGRAM_BOT_TOKEN", ""),
             ("TELEGRAM_CHAT_ID", ""),
+            ("TELEGRAM_WEBHOOK_SECRET", ""),
         ]))
         .unwrap();
         assert_eq!(cfg.smtp_port, 587);
@@ -216,6 +222,7 @@ mod tests {
         assert_eq!(cfg.google_client_id, None);
         assert_eq!(cfg.github_client_secret, None);
         assert_eq!(cfg.telegram_token, None);
+        assert_eq!(cfg.telegram_webhook_secret, None);
     }
 
     #[test]
