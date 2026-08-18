@@ -16,11 +16,20 @@ config:
   smtpPort: "587"
   smtpUsername: ""
   smtpFrom: ""
+  # Drop failed notification batches after this many hours
+  # (runtime env NOTIFICATION_MAX_RETRY_AGE_HOURS, default 168).
+  # notificationMaxRetryAgeHours: "168"
 
 secrets:
   telegramBotToken: ""
   # Öffentlicher Kanal: Chat-ID ist der @-Name (Bot muss Kanal-Admin sein).
   telegramChatId: "@ov_linz"
+  # Telegram webhook secret for handle verification (runtime env
+  # TELEGRAM_WEBHOOK_SECRET); if set, the bot registers its webhook on startup.
+  # telegramWebhookSecret: ""
+  # Optional override for notification sender address (runtime env
+  # NOTIFICATION_EMAIL_FROM); defaults to showings@<host>.
+  # notificationEmailFrom: "showings@cinema.k-labs.app"
   databaseUrl: ""     # only used when postgres.create=false
   googleClientId: ""
   googleClientSecret: ""

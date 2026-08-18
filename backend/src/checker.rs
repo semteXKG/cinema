@@ -381,6 +381,7 @@ mod tests {
             smtp_password: None,
             smtp_from: None,
             notification_email_from: None,
+            notification_max_retry_age_hours: 168,
             base_url: "https://cinema.k-labs.app".into(),
             google_client_id: None,
             google_client_secret: None,

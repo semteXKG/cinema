@@ -18,6 +18,7 @@ pub struct Config {
     pub smtp_password: Option<String>,
     pub smtp_from: Option<String>,
     pub notification_email_from: Option<String>,
+    pub notification_max_retry_age_hours: u64,
     pub base_url: String,
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
@@ -61,6 +62,10 @@ impl Config {
             .unwrap_or_else(|| "587".into())
             .parse()
             .map_err(|_| anyhow::anyhow!("SMTP_PORT must be a number"))?;
+        let notification_max_retry_age_hours: u64 = get("NOTIFICATION_MAX_RETRY_AGE_HOURS")
+            .unwrap_or_else(|| "168".into())
+            .parse()
+            .map_err(|_| anyhow::anyhow!("NOTIFICATION_MAX_RETRY_AGE_HOURS must be a number"))?;
         Ok(Config {
             telegram_token: get("TELEGRAM_BOT_TOKEN"),
             telegram_chat_id: get("TELEGRAM_CHAT_ID"),
@@ -79,6 +84,7 @@ impl Config {
             smtp_password: get("SMTP_PASSWORD"),
             smtp_from: get("SMTP_FROM"),
             notification_email_from: get("NOTIFICATION_EMAIL_FROM"),
+            notification_max_retry_age_hours,
             base_url: get("BASE_URL").unwrap_or_else(|| "https://cinema.k-labs.app".into()),
             google_client_id: get("GOOGLE_CLIENT_ID"),
             google_client_secret: get("GOOGLE_CLIENT_SECRET"),
@@ -121,6 +127,7 @@ mod tests {
         assert_eq!(cfg.smtp_host, None);
         assert_eq!(cfg.smtp_from, None);
         assert_eq!(cfg.notification_email_from, None);
+        assert_eq!(cfg.notification_max_retry_age_hours, 168);
         assert_eq!(cfg.base_url, "https://cinema.k-labs.app");
         assert_eq!(cfg.google_client_id, None);
     }
@@ -141,6 +148,7 @@ mod tests {
             ("SMTP_PORT", "465"),
             ("SMTP_FROM", "OV-Kino <noreply@k-labs.app>"),
             ("NOTIFICATION_EMAIL_FROM", "showings@example.com"),
+            ("NOTIFICATION_MAX_RETRY_AGE_HOURS", "48"),
             ("BASE_URL", "http://localhost:8080"),
             ("GOOGLE_CLIENT_ID", "gcid"),
             ("GOOGLE_CLIENT_SECRET", "gcs"),
@@ -165,6 +173,7 @@ mod tests {
             cfg.notification_email_from.as_deref(),
             Some("showings@example.com")
         );
+        assert_eq!(cfg.notification_max_retry_age_hours, 48);
         assert_eq!(cfg.base_url, "http://localhost:8080");
         assert_eq!(cfg.google_client_id.as_deref(), Some("gcid"));
         assert_eq!(cfg.google_client_secret.as_deref(), Some("gcs"));
@@ -204,6 +213,7 @@ mod tests {
             ("SMTP_PASSWORD", ""),
             ("SMTP_FROM", ""),
             ("NOTIFICATION_EMAIL_FROM", ""),
+            ("NOTIFICATION_MAX_RETRY_AGE_HOURS", ""),
             ("GOOGLE_CLIENT_ID", ""),
             ("GOOGLE_CLIENT_SECRET", ""),
             ("GITHUB_CLIENT_ID", ""),
@@ -219,6 +229,7 @@ mod tests {
         assert_eq!(cfg.smtp_password, None);
         assert_eq!(cfg.smtp_from, None);
         assert_eq!(cfg.notification_email_from, None);
+        assert_eq!(cfg.notification_max_retry_age_hours, 168);
         assert_eq!(cfg.google_client_id, None);
         assert_eq!(cfg.github_client_secret, None);
         assert_eq!(cfg.telegram_token, None);

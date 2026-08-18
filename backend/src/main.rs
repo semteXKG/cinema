@@ -119,6 +119,25 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
     let config = Config::from_env()?;
+    if let (Some(token), Some(secret)) = (&config.telegram_token, &config.telegram_webhook_secret) {
+        let webhook_url = format!("{}/api/telegram/webhook/{}", config.base_url, secret);
+        match reqwest::Client::new()
+            .post(format!("https://api.telegram.org/bot{token}/setWebhook"))
+            .json(&serde_json::json!({ "url": webhook_url }))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::info!("telegram webhook registered to {webhook_url}");
+            }
+            Ok(resp) => {
+                tracing::warn!("telegram setWebhook returned HTTP {}", resp.status());
+            }
+            Err(e) => {
+                tracing::warn!("failed to register telegram webhook: {e}");
+            }
+        }
+    }
     let pool = PgPool::connect(&config.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
     if let Err(e) = db::prune_expired_sessions(&pool).await {
