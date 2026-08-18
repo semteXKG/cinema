@@ -191,18 +191,16 @@ Expected: compile errors because structs/functions don't exist.
 Create `backend/src/notification/mod.rs`:
 
 ```rust
-mod api;
-pub mod batch;
 pub mod db;
-pub mod schedule;
-pub mod send;
-pub mod verify;
-
-pub use api::preferences_router;
-pub use verify::telegram_webhook_router;
 ```
 
 Add `mod notification;` to `backend/src/main.rs`.
+
+Note: later tasks append their module declarations to this file as the modules
+are created: Task 3 adds `pub mod schedule;`, Task 4 adds `mod api;` +
+`pub use api::preferences_router;`, Tasks 5 adds `pub mod send;`, Task 7 adds
+`pub mod batch;`, Task 8 adds `pub mod verify;` +
+`pub use verify::telegram_webhook_router;`.
 
 - [ ] **Step 3: Implement DB helpers**
 
@@ -260,6 +258,7 @@ git commit -m "feat: notification DB helpers and defaults"
 
 **Files:**
 - Create: `backend/src/notification/schedule.rs`
+- Modify: `backend/src/notification/mod.rs` (add `pub mod schedule;`)
 
 **Interfaces:**
 - Consumes: `digest_anchor: DateTime<Utc>`, `digest_hour: i32`, `frequency_days: i32`, `now: DateTime<Utc>`.
@@ -379,7 +378,8 @@ git commit -m "feat: digest scheduling helper"
 
 **Files:**
 - Create: `backend/src/notification/api.rs`
-- Modify: `backend/src/notification/mod.rs`
+- Modify: `backend/src/notification/mod.rs` (add `mod api;` + `pub use api::preferences_router;`)
+- Modify: `backend/src/auth.rs` (make `new_token` `pub(crate)`)
 - Modify: `backend/src/web.rs`
 
 **Interfaces:**
@@ -524,8 +524,8 @@ git commit -m "feat: preferences API endpoints"
 
 **Files:**
 - Create: `backend/src/notification/send.rs`
-- Modify: `backend/src/config.rs`
-- Modify: `backend/src/web.rs` (add `notification_email_from` to AppState if needed)
+- Modify: `backend/src/notification/mod.rs` (add `pub mod send;`)
+- Modify: `backend/src/config.rs` (add `notification_email_from` config field; the from address is baked into `EmailNotifier`, not stored on AppState)
 
 **Interfaces:**
 - Consumes: `SmtpConfig` from `auth.rs`/web, from address, recipient email, HTML body.
@@ -618,7 +618,7 @@ impl EmailNotifier {
 }
 ```
 
-Add `notification_email_from` to `Config` and `AppState`, defaulting to `showings@<base_url_domain>`.
+Add `notification_email_from: Option<String>` to `Config`, defaulting to `showings@<base_url_domain>` when unset.
 
 - [ ] **Step 3: Run email notifier tests**
 
@@ -723,6 +723,7 @@ git commit -m "feat: telegram DM notifier"
 
 **Files:**
 - Create: `backend/src/notification/batch.rs`
+- Modify: `backend/src/notification/mod.rs` (add `pub mod batch;`)
 
 **Interfaces:**
 - Consumes: `PgPool`, new showing IDs, `NotificationPreferences`, notifiers.
@@ -792,9 +793,9 @@ git commit -m "feat: notification batching engine"
 
 **Files:**
 - Create: `backend/src/notification/verify.rs`
-- Modify: `backend/src/notification/mod.rs`
-- Modify: `backend/src/web.rs`
-- Modify: `backend/src/config.rs`
+- Modify: `backend/src/notification/mod.rs` (add `pub mod verify;` + `pub use verify::telegram_webhook_router;`)
+- Modify: `backend/src/web.rs` (add `telegram_webhook_secret: Option<String>` field to AppState)
+- Modify: `backend/src/main.rs` (pass `telegram_webhook_secret` when constructing AppState)
 
 **Interfaces:**
 - Consumes: Telegram update JSON, webhook secret, `notification::db`.
@@ -840,15 +841,21 @@ async fn post_webhook(
 ) -> StatusCode { ... }
 ```
 
-- Reject if `secret != state.telegram_webhook_secret`.
+- Reject with `401` if `state.telegram_webhook_secret.as_deref() != Some(secret.as_str())`.
 - Extract `update.message.from.username` and `update.message.chat.id`.
 - Normalize username.
 - Update matching preference row with `telegram_chat_id`.
 - Return `200 OK` (Telegram expects 200).
 
-- [ ] **Step 3: Mount router and add config**
+- [ ] **Step 3: Mount router and add AppState field**
 
-Add `telegram_webhook_secret: String` to `Config` and `AppState`. Mount the webhook router in `web.rs`.
+Add `telegram_webhook_secret: Option<String>` to `AppState` (all `AppState { ... }` literals in tests get `telegram_webhook_secret: None,`). Mount the webhook router in `web.rs`:
+
+```rust
+.merge(crate::notification::telegram_webhook_router())
+```
+
+The `Config` field and env parsing are added in Task 12.
 
 - [ ] **Step 4: Run webhook tests**
 
@@ -868,6 +875,8 @@ git commit -m "feat: telegram handle verification webhook"
 ### Task 9: Integrate batching into checker
 
 **Files:**
+- Modify: `backend/src/db.rs` (change `insert_showing` to return `Option<i64>`)
+- Modify: `backend/src/db.rs` tests
 - Modify: `backend/src/checker.rs`
 
 **Interfaces:**
