@@ -337,6 +337,7 @@ pub fn parse_frequency(value: &str) -> Option<Frequency> {
         n => n.parse::<i32>().ok().filter(|&d| d >= 1 && d <= 7).map(Frequency::Days),
     }
 }
+```
 
 ```rust
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
