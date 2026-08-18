@@ -340,6 +340,7 @@ mod tests {
             smtp_username: None,
             smtp_password: None,
             smtp_from: None,
+            notification_email_from: None,
             base_url: "https://cinema.k-labs.app".into(),
             google_client_id: None,
             google_client_secret: None,

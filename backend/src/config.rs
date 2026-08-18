@@ -16,6 +16,7 @@ pub struct Config {
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub smtp_from: Option<String>,
+    pub notification_email_from: Option<String>,
     pub base_url: String,
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
@@ -75,6 +76,7 @@ impl Config {
             smtp_username: get("SMTP_USERNAME"),
             smtp_password: get("SMTP_PASSWORD"),
             smtp_from: get("SMTP_FROM"),
+            notification_email_from: get("NOTIFICATION_EMAIL_FROM"),
             base_url: get("BASE_URL").unwrap_or_else(|| "https://cinema.k-labs.app".into()),
             google_client_id: get("GOOGLE_CLIENT_ID"),
             google_client_secret: get("GOOGLE_CLIENT_SECRET"),
@@ -115,6 +117,7 @@ mod tests {
         assert_eq!(cfg.smtp_port, 587);
         assert_eq!(cfg.smtp_host, None);
         assert_eq!(cfg.smtp_from, None);
+        assert_eq!(cfg.notification_email_from, None);
         assert_eq!(cfg.base_url, "https://cinema.k-labs.app");
         assert_eq!(cfg.google_client_id, None);
     }
@@ -133,6 +136,7 @@ mod tests {
             ("SMTP_HOST", "smtp.example.com"),
             ("SMTP_PORT", "465"),
             ("SMTP_FROM", "OV-Kino <noreply@k-labs.app>"),
+            ("NOTIFICATION_EMAIL_FROM", "showings@example.com"),
             ("BASE_URL", "http://localhost:8080"),
             ("GOOGLE_CLIENT_ID", "gcid"),
             ("GOOGLE_CLIENT_SECRET", "gcs"),
@@ -151,6 +155,10 @@ mod tests {
         assert_eq!(
             cfg.smtp_from.as_deref(),
             Some("OV-Kino <noreply@k-labs.app>")
+        );
+        assert_eq!(
+            cfg.notification_email_from.as_deref(),
+            Some("showings@example.com")
         );
         assert_eq!(cfg.base_url, "http://localhost:8080");
         assert_eq!(cfg.google_client_id.as_deref(), Some("gcid"));
@@ -190,6 +198,7 @@ mod tests {
             ("SMTP_USERNAME", ""),
             ("SMTP_PASSWORD", ""),
             ("SMTP_FROM", ""),
+            ("NOTIFICATION_EMAIL_FROM", ""),
             ("GOOGLE_CLIENT_ID", ""),
             ("GOOGLE_CLIENT_SECRET", ""),
             ("GITHUB_CLIENT_ID", ""),
@@ -203,6 +212,7 @@ mod tests {
         assert_eq!(cfg.smtp_username, None);
         assert_eq!(cfg.smtp_password, None);
         assert_eq!(cfg.smtp_from, None);
+        assert_eq!(cfg.notification_email_from, None);
         assert_eq!(cfg.google_client_id, None);
         assert_eq!(cfg.github_client_secret, None);
         assert_eq!(cfg.telegram_token, None);
