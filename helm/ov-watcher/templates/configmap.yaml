@@ -10,3 +10,4 @@ data:
   SMTP_PORT: "{{ .Values.config.smtpPort }}"
   SMTP_USERNAME: "{{ .Values.config.smtpUsername }}"
   SMTP_FROM: "{{ .Values.config.smtpFrom }}"
+  NOTIFICATION_MAX_RETRY_AGE_HOURS: "{{ .Values.config.notificationMaxRetryAgeHours }}"

@@ -135,15 +135,18 @@ jobs:
             --namespace default \
             --set image.tag=${{ steps.tag.outputs.sha }} \
             --set secrets.telegramBotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            --set secrets.telegramWebhookSecret="${{ secrets.TELEGRAM_WEBHOOK_SECRET }}" \
             --set secrets.googleClientId="${{ secrets.GOOGLE_CLIENT_ID }}" \
             --set secrets.googleClientSecret="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
             --set secrets.githubClientId="${{ secrets.GH_CLIENT_ID }}" \
             --set secrets.githubClientSecret="${{ secrets.GH_CLIENT_SECRET }}" \
             --set secrets.smtpPassword="${{ secrets.SMTP_PASSWORD }}" \
+            --set secrets.notificationEmailFrom="${{ secrets.NOTIFICATION_EMAIL_FROM }}" \
             --set config.smtpHost="${{ secrets.SMTP_HOST }}" \
             --set config.smtpPort="${{ secrets.SMTP_PORT }}" \
             --set config.smtpUsername="${{ secrets.SMTP_USERNAME }}" \
             --set config.smtpFrom="${{ secrets.SMTP_FROM }}" \
+            --set config.notificationMaxRetryAgeHours="168" \
             --set postgres.password="${{ secrets.POSTGRES_PASSWORD }}"
 
       - name: Verify rollout
