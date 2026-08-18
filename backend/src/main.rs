@@ -5,6 +5,7 @@ mod db;
 mod fetchers;
 mod ics;
 mod models;
+mod notification;
 mod notify;
 mod web;
 
