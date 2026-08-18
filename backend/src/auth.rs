@@ -87,7 +87,7 @@ fn cleared_session_cookie() -> String {
     )
 }
 
-fn new_token() -> String {
+pub(crate) fn new_token() -> String {
     let mut rng = rand::thread_rng();
     let bytes: [u8; 32] = rng.gen();
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)

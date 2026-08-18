@@ -83,6 +83,7 @@ pub fn router(state: AppState) -> Router {
         .route("/posters/{name}", get(poster))
         .route("/healthz", get(healthz))
         .merge(crate::auth::auth_router())
+        .merge(crate::notification::preferences_router())
         .fallback_service(
             ServeDir::new(&state.static_dir)
                 .fallback(ServeFile::new(state.static_dir.join("index.html"))),
