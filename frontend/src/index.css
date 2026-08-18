@@ -216,3 +216,6 @@
   border-radius:4px;padding:.3rem .5rem;font-size:.8rem;width:200px}
  .pref-input::placeholder{color:var(--faint)}
  .pref-input:focus{outline:none;border-color:var(--gold)}
+ .pref-verified{color:var(--ok);font-size:.8rem}
+ .pref-verify-prompt{color:var(--faint);font-size:.8rem}
+ .pref-error{color:var(--bad);font-size:.9rem}

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Marquee } from "../components/Marquee";
-import { FREQUENCY_OPTIONS, type NotificationFrequency } from "../types";
+import { FREQUENCY_OPTIONS, type NotificationFrequency, type NotificationPreferences } from "../types";
+import { fetchPreferences, savePreferences } from "../api/preferences";
 
 function frequencyLabel(t: TFunction, value: NotificationFrequency): string {
   if (value === "never") return t("preferences.frequencies.never");
@@ -12,10 +13,19 @@ function frequencyLabel(t: TFunction, value: NotificationFrequency): string {
 
 export function PreferencesPage() {
   const { t } = useTranslation();
-  const [emailFreq, setEmailFreq] = useState<NotificationFrequency>("immediately");
-  const [telegramFreq, setTelegramFreq] = useState<NotificationFrequency>("never");
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
-  const [telegramHandle, setTelegramHandle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPreferences()
+      .then((p) => { if (!cancelled) setPrefs(p); })
+      .catch(() => { if (!cancelled) setError(t("preferences.loadError")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [t]);
 
   useEffect(() => {
     if (!saved) return;
@@ -23,13 +33,29 @@ export function PreferencesPage() {
     return () => clearTimeout(id);
   }, [saved]);
 
+  const handleSave = async () => {
+    if (!prefs) return;
+    try {
+      const updated = await savePreferences(prefs);
+      setPrefs(updated);
+      setSaved(true);
+      setError(null);
+    } catch {
+      setError(t("preferences.saveError"));
+    }
+  };
+
+  if (loading) return <div className="preferences"><Marquee /><p>{t("preferences.loading")}</p></div>;
+  if (error) return <div className="preferences"><Marquee /><p className="pref-error">{error}</p></div>;
+  if (!prefs) return null;
+
   const channels: Array<{
     name: "email" | "telegram";
     freq: NotificationFrequency;
     onChange: (v: NotificationFrequency) => void;
   }> = [
-    { name: "email", freq: emailFreq, onChange: setEmailFreq },
-    { name: "telegram", freq: telegramFreq, onChange: setTelegramFreq },
+    { name: "email", freq: prefs.emailFrequency, onChange: (v) => setPrefs({ ...prefs, emailFrequency: v }) },
+    { name: "telegram", freq: prefs.telegramFrequency, onChange: (v) => setPrefs({ ...prefs, telegramFrequency: v }) },
   ];
 
   return (
@@ -49,9 +75,7 @@ export function PreferencesPage() {
               onChange={(e) => c.onChange(e.target.value as NotificationFrequency)}
             >
               {FREQUENCY_OPTIONS.map((v) => (
-                <option key={v} value={v}>
-                  {frequencyLabel(t, v)}
-                </option>
+                <option key={v} value={v}>{frequencyLabel(t, v)}</option>
               ))}
             </select>
           </label>
@@ -62,18 +86,25 @@ export function PreferencesPage() {
                 className="pref-input"
                 type="text"
                 placeholder={t("preferences.telegramHandlePlaceholder")}
-                value={telegramHandle}
-                onChange={(e) => setTelegramHandle(e.target.value)}
+                value={prefs.telegramHandle ?? ""}
+                onChange={(e) => setPrefs({ ...prefs, telegramHandle: e.target.value })}
                 aria-label={t("preferences.telegramHandle")}
               />
             </label>
           )}
+          {c.name === "telegram" && (
+            <div className="pref-telegram-status">
+              {prefs.telegramVerified ? (
+                <span className="pref-verified">{t("preferences.telegramVerified")}</span>
+              ) : prefs.telegramHandle ? (
+                <span className="pref-verify-prompt">{t("preferences.telegramVerifyPrompt")}</span>
+              ) : null}
+            </div>
+          )}
         </div>
       ))}
       <div className="pref-actions">
-        <button className="auth-submit" onClick={() => setSaved(true)}>
-          {t("preferences.save")}
-        </button>
+        <button className="auth-submit" onClick={handleSave}>{t("preferences.save")}</button>
         {saved && <span className="pref-saved">{t("preferences.saved")}</span>}
       </div>
     </div>

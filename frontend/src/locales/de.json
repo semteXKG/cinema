@@ -58,6 +58,11 @@
       "days_other": "{{count}} Tage"
     },
     "save": "Speichern",
-    "saved": "Gespeichert"
+    "saved": "Gespeichert",
+    "loadError": "Einstellungen konnten nicht geladen werden.",
+    "saveError": "Einstellungen konnten nicht gespeichert werden.",
+    "loading": "Lädt…",
+    "telegramVerified": "Telegram-Konto verknüpft.",
+    "telegramVerifyPrompt": "Sende eine beliebige Nachricht an @ov_linzz_bot, um dein Konto zu verknüpfen."
   }
 }
