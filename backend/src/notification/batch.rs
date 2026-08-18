@@ -285,7 +285,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(inserted);
+        assert!(inserted.is_some());
         sqlx::query_as::<_, (i64,)>("SELECT id FROM showing WHERE movie_id = $1")
             .bind(mid)
             .fetch_one(pool)

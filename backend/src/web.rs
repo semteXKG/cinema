@@ -465,7 +465,7 @@ mod tests {
         let mid = crate::db::upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
             .await
             .unwrap();
-        crate::db::insert_showing(
+        assert!(crate::db::insert_showing(
             &pool,
             mid,
             Utc::now() + chrono::Duration::days(1),
@@ -475,7 +475,8 @@ mod tests {
             Utc::now(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .is_some());
         let resp = app
             .oneshot(
                 Request::get("/api/showings")
@@ -499,7 +500,7 @@ mod tests {
             crate::db::upsert_movie(&pool, "Cineplexx Linz", "F1", Some(121), &[], None, None)
                 .await
                 .unwrap();
-        crate::db::insert_showing(
+        assert!(crate::db::insert_showing(
             &pool,
             mid,
             Utc::now() + chrono::Duration::days(1),
@@ -509,7 +510,8 @@ mod tests {
             Utc::now(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .is_some());
         let state = AppState {
             pool,
             data_dir: PathBuf::new(),

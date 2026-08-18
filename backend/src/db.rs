@@ -52,7 +52,7 @@ pub async fn insert_showing(
     hall: &str,
     url: &str,
     first_seen: DateTime<Utc>,
-) -> sqlx::Result<bool> {
+) -> sqlx::Result<Option<i64>> {
     let row: Option<(i64,)> = sqlx::query_as(
         "INSERT INTO showing (movie_id, start, version, hall, url, first_seen_at)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -67,7 +67,7 @@ pub async fn insert_showing(
     .bind(first_seen)
     .fetch_optional(pool)
     .await?;
-    Ok(row.is_some())
+    Ok(row.map(|r| r.0))
 }
 
 pub async fn upcoming_view(pool: &PgPool, since: DateTime<Utc>) -> sqlx::Result<Vec<ShowingView>> {
@@ -342,9 +342,12 @@ mod tests {
         let view = upcoming_view(&pool, Utc::now()).await.unwrap();
         assert!(view.is_empty()); // no showings yet
                                   // the second upsert must have overwritten the metadata
-        insert_showing(&pool, id2, at(19), "OV", "Saal 6", "https://x", at(12))
-            .await
-            .unwrap();
+        assert!(
+            insert_showing(&pool, id2, at(19), "OV", "Saal 6", "https://x", at(12))
+                .await
+                .unwrap()
+                .is_some()
+        );
         let view = upcoming_view(&pool, at(0)).await.unwrap();
         assert_eq!(view.len(), 1);
         assert_eq!(view[0].runtime_min, Some(120));
@@ -361,11 +364,13 @@ mod tests {
             insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
                 .await
                 .unwrap()
+                .is_some()
         );
         assert!(
-            !insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
                 .await
                 .unwrap()
+                .is_none()
         );
     }
 
@@ -382,9 +387,12 @@ mod tests {
         )
         .await
         .unwrap();
-        insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
-            .await
-            .unwrap();
+        assert!(
+            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+                .await
+                .unwrap()
+                .is_some()
+        );
         let view = upcoming_view(&pool, at(0)).await.unwrap();
         assert_eq!(view.len(), 1);
         assert_eq!(view[0].movie, "F1");
@@ -400,9 +408,12 @@ mod tests {
         let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
             .await
             .unwrap();
-        insert_showing(&pool, mid, at(1), "OV", "", "https://x", at(0))
-            .await
-            .unwrap();
+        assert!(
+            insert_showing(&pool, mid, at(1), "OV", "", "https://x", at(0))
+                .await
+                .unwrap()
+                .is_some()
+        );
         prune(&pool, at(2)).await.unwrap();
         assert!(upcoming_view(&pool, at(0)).await.unwrap().is_empty());
         // movie is gone too -> re-insert gets a fresh id

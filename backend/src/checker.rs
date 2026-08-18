@@ -53,6 +53,8 @@ pub struct CheckCtx<'a> {
     pub config: &'a Config,
     pub notifier: Option<&'a dyn Notifier>,
     pub fetchers: Vec<(&'a str, &'a dyn Fetcher)>,
+    pub email: Option<&'a dyn crate::notification::batch::EmailSender>,
+    pub telegram: Option<&'a dyn crate::notification::batch::TelegramSender>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -194,6 +196,7 @@ pub async fn run_check(ctx: &CheckCtx<'_>, now: DateTime<Utc>) -> anyhow::Result
     .await;
 
     // 4. DB writes
+    let mut new_showing_ids: Vec<(i64, &Showing)> = Vec::new();
     let mut new_showings: Vec<Showing> = Vec::new();
     for s in &upcoming {
         let key = format!("{}|{}", s.cinema, s.movie);
@@ -209,11 +212,12 @@ pub async fn run_check(ctx: &CheckCtx<'_>, now: DateTime<Utc>) -> anyhow::Result
             poster_file,
         )
         .await?;
-        if db::insert_showing(
+        if let Some(showing_id) = db::insert_showing(
             ctx.pool, movie_id, s.start, &s.version, &s.hall, &s.url, now,
         )
         .await?
         {
+            new_showing_ids.push((showing_id, s));
             new_showings.push(s.clone());
         }
     }
@@ -241,6 +245,23 @@ pub async fn run_check(ctx: &CheckCtx<'_>, now: DateTime<Utc>) -> anyhow::Result
             notifier.send(text).await?;
         }
     }
+
+    // 6. Notification batches: queue new showings for subscribed users, then
+    // send whatever is due (public-channel behavior above is untouched).
+    if !new_showing_ids.is_empty() {
+        let prefs = crate::notification::db::list_active_preferences(ctx.pool).await?;
+        for (showing_id, _) in &new_showing_ids {
+            crate::notification::batch::append_showing_for_users(ctx.pool, *showing_id, &prefs)
+                .await?;
+        }
+    }
+    let batch_ctx = crate::notification::batch::BatchCtx {
+        pool: ctx.pool,
+        email: ctx.email,
+        telegram: ctx.telegram,
+        base_url: &ctx.config.base_url,
+    };
+    crate::notification::batch::process_due_batches(&batch_ctx, now).await?;
 
     Ok(CheckResult {
         new_showings: new_showings.len(),
@@ -309,6 +330,22 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct RecordingEmail {
+        sent: Arc<Mutex<Vec<(String, String, String)>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::notification::batch::EmailSender for RecordingEmail {
+        async fn send_email(&self, to: &str, subject: &str, html: &str) -> anyhow::Result<()> {
+            self.sent
+                .lock()
+                .unwrap()
+                .push((to.to_string(), subject.to_string(), html.to_string()));
+            Ok(())
+        }
+    }
+
     fn ctx<'a>(
         pool: &'a PgPool,
         http: &'a HttpClient,
@@ -322,6 +359,8 @@ mod tests {
             config,
             notifier,
             fetchers: vec![("cineplexx", fetcher)],
+            email: None,
+            telegram: None,
         }
     }
 
@@ -409,6 +448,8 @@ mod tests {
             config: &cfg,
             notifier: Some(&notifier),
             fetchers: vec![("megaplex", &fetcher)],
+            email: None,
+            telegram: None,
         };
         let r = run_check(&c, now()).await.unwrap();
         assert_eq!(
@@ -543,6 +584,51 @@ mod tests {
         run_check(&c, now()).await.unwrap(); // must not raise
         let view = crate::db::upcoming_view(&pool, now()).await.unwrap();
         assert_eq!(view[0].poster_file, None);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn new_showing_creates_batch_for_immediate_user(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = config(dir.path(), false);
+        let http = http();
+        let fetcher = FakeFetcher {
+            result: Ok((vec![make_showing(20)], HashMap::new())),
+        };
+        let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
+            .await
+            .unwrap();
+        crate::notification::db::upsert_preferences(
+            &pool,
+            uid,
+            crate::notification::db::PreferenceUpdate {
+                email_frequency: Some("immediately".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let email = RecordingEmail::default();
+        let c = CheckCtx {
+            pool: &pool,
+            http: &http,
+            config: &cfg,
+            notifier: None,
+            fetchers: vec![("cineplexx", &fetcher)],
+            email: Some(&email),
+            telegram: None,
+        };
+        let r = run_check(&c, now()).await.unwrap();
+        assert_eq!((r.new_showings, r.total_showings), (1, 1));
+        {
+            let sent = email.sent.lock().unwrap();
+            assert_eq!(sent.len(), 1, "immediately email batch must be sent");
+            assert_eq!(sent[0].0, "a@b.com");
+            assert!(sent[0].2.contains("The Odyssey"));
+        }
+        // second run: same showing -> dedup, no new batch, no second email
+        let r2 = run_check(&c, now()).await.unwrap();
+        assert_eq!(r2.new_showings, 0);
+        assert_eq!(email.sent.lock().unwrap().len(), 1);
     }
 
     #[test]

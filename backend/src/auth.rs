@@ -110,7 +110,7 @@ fn redirect_to_with_cookie(location: &str, cookie: &str) -> Response {
         .unwrap()
 }
 
-fn build_mailer(
+pub(crate) fn build_mailer(
     smtp: &crate::web::SmtpConfig,
 ) -> Result<AsyncSmtpTransport<Tokio1Executor>, StatusCode> {
     let creds = Credentials::new(

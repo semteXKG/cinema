@@ -257,9 +257,18 @@ mod tests {
             .await
             .unwrap();
         let start = Utc::now() + Duration::days(1);
-        crate::db::insert_showing(pool, mid, start, "OV", "Saal 6", "https://x", Utc::now())
-            .await
-            .unwrap();
+        assert!(crate::db::insert_showing(
+            pool,
+            mid,
+            start,
+            "OV",
+            "Saal 6",
+            "https://x",
+            Utc::now()
+        )
+        .await
+        .unwrap()
+        .is_some());
         sqlx::query_as::<_, (i64,)>("SELECT id FROM showing WHERE movie_id = $1")
             .bind(mid)
             .fetch_one(pool)
