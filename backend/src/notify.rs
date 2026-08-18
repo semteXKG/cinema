@@ -144,36 +144,31 @@ pub trait Notifier: Send + Sync {
     async fn send(&self, text: &str) -> anyhow::Result<()>;
 }
 
-pub struct TelegramNotifier {
+pub struct TelegramDmNotifier {
     client: reqwest::Client,
     base_url: String,
     token: String,
-    chat_id: String,
 }
 
-impl TelegramNotifier {
-    pub fn new(token: &str, chat_id: &str) -> Self {
-        Self::with_base_url(token, chat_id, "https://api.telegram.org")
+impl TelegramDmNotifier {
+    pub fn new(token: &str) -> Self {
+        Self::with_base_url(token, "https://api.telegram.org")
     }
 
-    pub fn with_base_url(token: &str, chat_id: &str, base_url: &str) -> Self {
-        TelegramNotifier {
+    pub fn with_base_url(token: &str, base_url: &str) -> Self {
+        TelegramDmNotifier {
             client: reqwest::Client::new(),
             base_url: base_url.to_string(),
             token: token.to_string(),
-            chat_id: chat_id.to_string(),
         }
     }
-}
 
-#[async_trait::async_trait]
-impl Notifier for TelegramNotifier {
-    async fn send(&self, text: &str) -> anyhow::Result<()> {
+    pub async fn send_to(&self, chat_id: &str, text: &str) -> anyhow::Result<()> {
         for chunk in chunk_text(text, MAX_LEN) {
             self.client
                 .post(format!("{}/bot{}/sendMessage", self.base_url, self.token))
                 .json(&serde_json::json!({
-                    "chat_id": self.chat_id,
+                    "chat_id": chat_id,
                     "text": chunk,
                     "parse_mode": "HTML",
                     "link_preview_options": {"is_disabled": true},
@@ -184,6 +179,31 @@ impl Notifier for TelegramNotifier {
                 .error_for_status()?;
         }
         Ok(())
+    }
+}
+
+pub struct TelegramNotifier {
+    dm: TelegramDmNotifier,
+    chat_id: String,
+}
+
+impl TelegramNotifier {
+    pub fn new(token: &str, chat_id: &str) -> Self {
+        Self::with_base_url(token, chat_id, "https://api.telegram.org")
+    }
+
+    pub fn with_base_url(token: &str, chat_id: &str, base_url: &str) -> Self {
+        TelegramNotifier {
+            dm: TelegramDmNotifier::with_base_url(token, base_url),
+            chat_id: chat_id.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Notifier for TelegramNotifier {
+    async fn send(&self, text: &str) -> anyhow::Result<()> {
+        self.dm.send_to(&self.chat_id, text).await
     }
 }
 
@@ -493,5 +513,31 @@ mod tests {
             .map(|c| c["text"].as_str().unwrap().to_string())
             .collect();
         assert_eq!(joined, text);
+    }
+
+    #[tokio::test]
+    async fn telegram_dm_sends_to_user_chat() {
+        let (base, captured) = spawn_capture_server().await;
+        let notifier = TelegramDmNotifier::with_base_url("TOKEN", &base);
+        notifier.send_to("12345", "hello").await.unwrap();
+        let calls = captured.lock().unwrap();
+        assert_eq!(calls[0]["chat_id"], "12345");
+        assert_eq!(calls[0]["text"], "hello");
+    }
+
+    #[tokio::test]
+    async fn telegram_dm_chunks_long_text() {
+        let (base, captured) = spawn_capture_server().await;
+        let notifier = TelegramDmNotifier::with_base_url("TOKEN", &base);
+        let text = "y".repeat(5000);
+        notifier.send_to("12345", &text).await.unwrap();
+        let calls = captured.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        let joined: String = calls
+            .iter()
+            .map(|c| c["text"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(joined, text);
+        assert!(calls.iter().all(|c| c["chat_id"] == "12345"));
     }
 }
