@@ -10,6 +10,7 @@ export interface MovieView {
   metaLine: string;
   poster: string | null;
   showings: ShowingRow[];
+  ignored: boolean;
 }
 
 export interface CinemaView {

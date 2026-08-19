@@ -1,3 +1,4 @@
+use crate::auth::{AuthUser, OptionalAuthUser};
 use crate::db::ShowingView;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -56,6 +57,7 @@ pub struct MovieView {
     pub meta_line: String,
     pub poster: Option<String>,
     pub showings: Vec<ShowingRow>,
+    pub ignored: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -69,7 +71,7 @@ pub struct ShowingRow {
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use axum::routing::get;
+use axum::routing::{delete, get, put};
 use axum::Router;
 use chrono_tz::Europe::Vienna;
 use std::collections::HashSet;
@@ -80,6 +82,8 @@ const CINEMA_ORDER: [&str; 1] = ["Megaplex PlusCity"];
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/showings", get(api_showings))
+        .route("/api/movies/ignore", put(put_movie_ignore))
+        .route("/api/movies/ignore", delete(delete_movie_ignore))
         .route("/showings.ics", get(showings_ics))
         .route("/posters/{name}", get(poster))
         .route("/healthz", get(healthz))
@@ -97,7 +101,56 @@ pub async fn healthz() -> &'static str {
     "ok"
 }
 
-async fn api_showings(State(state): State<AppState>) -> Result<Json<ApiPayload>, StatusCode> {
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IgnoreRequest {
+    pub cinema: String,
+    pub title: String,
+}
+
+async fn put_movie_ignore(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<IgnoreRequest>,
+) -> Result<StatusCode, StatusCode> {
+    crate::db::set_ignored(&state.pool, auth.user_id, &body.cinema, &body.title)
+        .await
+        .map_err(|e| {
+            tracing::error!("set_ignored failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_movie_ignore(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<IgnoreRequest>,
+) -> Result<StatusCode, StatusCode> {
+    crate::db::unset_ignored(&state.pool, auth.user_id, &body.cinema, &body.title)
+        .await
+        .map_err(|e| {
+            tracing::error!("unset_ignored failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn api_showings(
+    State(state): State<AppState>,
+    OptionalAuthUser(auth): OptionalAuthUser,
+) -> Result<Json<ApiPayload>, StatusCode> {
+    let ignored = match &auth {
+        Some(user) => Some(
+            crate::db::ignored_keys(&state.pool, user.user_id)
+                .await
+                .map_err(|e| {
+                    tracing::error!("ignored_keys failed: {e}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?,
+        ),
+        None => None,
+    };
     let run_at = crate::db::latest_check_run(&state.pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -114,7 +167,7 @@ async fn api_showings(State(state): State<AppState>) -> Result<Json<ApiPayload>,
             let statuses = crate::db::all_source_statuses(&state.pool)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            Ok(Json(build_payload(run_at, statuses, views)))
+            Ok(Json(build_payload(run_at, statuses, views, ignored)))
         }
     }
 }
@@ -188,6 +241,7 @@ pub fn build_payload(
     run_at: DateTime<Utc>,
     statuses: Vec<(String, String)>,
     views: Vec<ShowingView>,
+    ignored: Option<std::collections::HashSet<(String, String)>>,
 ) -> ApiPayload {
     // group by cinema, then movie, preserving order of first appearance
     // (the query is already sorted by start, cinema)
@@ -217,10 +271,10 @@ pub fn build_payload(
     let cinemas = cinemas
         .into_iter()
         .map(|(name, movies)| CinemaView {
-            name,
+            name: name.clone(),
             movies: movies
                 .into_iter()
-                .map(|(title, group)| movie_view(title, &group))
+                .map(|(title, group)| movie_view(&name, title, &group, &ignored))
                 .collect(),
         })
         .collect();
@@ -236,7 +290,12 @@ pub fn build_payload(
     }
 }
 
-fn movie_view(title: String, group: &[&ShowingView]) -> MovieView {
+fn movie_view(
+    cinema: &str,
+    title: String,
+    group: &[&ShowingView],
+    ignored: &Option<std::collections::HashSet<(String, String)>>,
+) -> MovieView {
     let bases: HashSet<&str> = group
         .iter()
         .map(|s| s.version.split(" - ").next().unwrap_or("").trim())
@@ -279,12 +338,17 @@ fn movie_view(title: String, group: &[&ShowingView]) -> MovieView {
             }
         })
         .collect();
+    let is_ignored = ignored
+        .as_ref()
+        .map(|s| s.contains(&(cinema.to_string(), title.clone())))
+        .unwrap_or(false);
     MovieView {
         title,
         badge,
         meta_line: meta_parts.join(" · "),
         poster: first.poster_file.clone(),
         showings,
+        ignored: is_ignored,
     }
 }
 
@@ -357,7 +421,12 @@ mod tests {
                 "",
             ),
         ];
-        let p = build_payload(run_at(), vec![("cineplexx".into(), "ok".into())], views);
+        let p = build_payload(
+            run_at(),
+            vec![("cineplexx".into(), "ok".into())],
+            views,
+            None,
+        );
         assert_eq!(p.generated_at.as_deref(), Some("2026-08-02T12:00:00+02:00"));
         // Megaplex first despite later in the alphabet
         assert_eq!(p.cinemas.as_ref().unwrap()[0].name, "Megaplex PlusCity");
@@ -380,7 +449,7 @@ mod tests {
             view("Cineplexx Linz", "F1", 4, 19, "OV", "Saal 6"),
             view("Cineplexx Linz", "F1", 5, 18, "OmU", "Saal 1"),
         ];
-        let p = build_payload(run_at(), vec![], views);
+        let p = build_payload(run_at(), vec![], views, None);
         let m = &p.cinemas.as_ref().unwrap()[0].movies[0];
         assert_eq!(m.badge, None);
         assert_eq!(m.showings[0].detail, "OV, Saal 6");
@@ -407,7 +476,7 @@ mod tests {
                 "",
             ),
         ];
-        let p = build_payload(run_at(), vec![], views);
+        let p = build_payload(run_at(), vec![], views, None);
         let m = &p.cinemas.as_ref().unwrap()[0].movies[0];
         assert_eq!(m.badge.as_deref(), Some("OV"));
         assert_eq!(m.showings[0].detail, "IMAX 2D");

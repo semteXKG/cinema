@@ -27,6 +27,44 @@ pub struct AuthUser {
     pub email: String,
 }
 
+pub struct OptionalAuthUser(pub Option<AuthUser>);
+
+impl<S: Sync> FromRequestParts<S> for OptionalAuthUser
+where
+    AppState: FromRef<S>,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let app_state = AppState::from_ref(state);
+        let cookie_header = parts
+            .headers
+            .get(header::COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = cookie_header
+            .split(';')
+            .map(|s| s.trim())
+            .find_map(|c| c.strip_prefix(&format!("{SESSION_COOKIE_NAME}=")))
+            .map(|t| t.to_string());
+        match token {
+            Some(t) => {
+                let row = db::lookup_session(&app_state.pool, &t).await.map_err(|e| {
+                    tracing::error!("lookup_session failed: {e}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+                match row {
+                    Some((user_id, email)) => {
+                        Ok(OptionalAuthUser(Some(AuthUser { user_id, email })))
+                    }
+                    None => Ok(OptionalAuthUser(None)),
+                }
+            }
+            None => Ok(OptionalAuthUser(None)),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MeResponse {

@@ -108,6 +108,18 @@ enum Outcome {
 
 async fn handle_batch(ctx: &BatchCtx<'_>, batch: &DueBatch) -> anyhow::Result<Outcome> {
     let (showings, metas) = load_batch_showings(ctx.pool, batch.batch_id).await?;
+    let ignored = crate::db::ignored_keys(ctx.pool, batch.user_id).await?;
+    let showings: Vec<_> = showings
+        .into_iter()
+        .filter(|s| !ignored.contains(&(s.cinema.clone(), s.movie.clone())))
+        .collect();
+    let metas: HashMap<String, MovieMeta> = metas
+        .into_iter()
+        .filter(|(k, _)| {
+            let (cinema, movie) = k.split_once('|').unwrap_or((k, ""));
+            !ignored.contains(&(cinema.to_string(), movie.to_string()))
+        })
+        .collect();
     if showings.is_empty() {
         return Ok(Outcome::Skipped);
     }

@@ -6,7 +6,7 @@ export function CinemaSection({ cinema }: { cinema: CinemaView }) {
     <section>
       <h2>{cinema.name}</h2>
       {cinema.movies.map((m) => (
-        <MovieCard key={m.title} movie={m} />
+        <MovieCard key={m.title} movie={m} cinema={cinema.name} />
       ))}
     </section>
   );

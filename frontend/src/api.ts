@@ -38,3 +38,21 @@ export async function fetchLoginStatus(): Promise<boolean> {
 export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }
+
+export async function setIgnored(cinema: string, title: string): Promise<void> {
+  const resp = await fetch("/api/movies/ignore", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cinema, title }),
+  });
+  if (!resp.ok) throw new Error(`PUT /api/movies/ignore failed: ${resp.status}`);
+}
+
+export async function unsetIgnored(cinema: string, title: string): Promise<void> {
+  const resp = await fetch("/api/movies/ignore", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cinema, title }),
+  });
+  if (!resp.ok) throw new Error(`DELETE /api/movies/ignore failed: ${resp.status}`);
+}

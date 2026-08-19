@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgPool;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ShowingView {
@@ -302,6 +303,48 @@ pub async fn prune_expired_sessions(pool: &PgPool) -> sqlx::Result<()> {
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn set_ignored(
+    pool: &PgPool,
+    user_id: i64,
+    cinema: &str,
+    title: &str,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO movie_ignore (user_id, cinema, title) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, cinema, title) DO NOTHING",
+    )
+    .bind(user_id)
+    .bind(cinema)
+    .bind(title)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn unset_ignored(
+    pool: &PgPool,
+    user_id: i64,
+    cinema: &str,
+    title: &str,
+) -> sqlx::Result<()> {
+    sqlx::query("DELETE FROM movie_ignore WHERE user_id = $1 AND cinema = $2 AND title = $3")
+        .bind(user_id)
+        .bind(cinema)
+        .bind(title)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn ignored_keys(pool: &PgPool, user_id: i64) -> sqlx::Result<HashSet<(String, String)>> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT cinema, title FROM movie_ignore WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().collect())
 }
 
 #[cfg(test)]
