@@ -332,13 +332,15 @@ pub async fn unset_ignored(
     cinema: &str,
     title: &str,
 ) -> sqlx::Result<()> {
-    sqlx::query("DELETE FROM movie_ignore
- WHERE user_id = $1 AND cinema_id = (SELECT id FROM cinema WHERE name = $2) AND title = $3")
-        .bind(user_id)
-        .bind(cinema)
-        .bind(title)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "DELETE FROM movie_ignore
+ WHERE user_id = $1 AND cinema_id = (SELECT id FROM cinema WHERE name = $2) AND title = $3",
+    )
+    .bind(user_id)
+    .bind(cinema)
+    .bind(title)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
