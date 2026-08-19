@@ -65,9 +65,9 @@ export function MovieCard({ movie, cinema }: MovieCardProps) {
       <div className="card ignored-card">
         <div className="ignored-row">
           <span className="ignored-title">{movie.title}</span>
-          <span className="ignored-label"> · Ignored</span>
-          <button className="ignore-btn" onClick={handleToggle} title="Unignore">
-            👁
+          <span className="ignored-badge">Ignored</span>
+          <button className="ignore-btn ignore-btn-show" onClick={handleToggle} title="Stop ignoring">
+            Show
           </button>
         </div>
         {error && <div className="ignore-error">{error}</div>}
@@ -91,8 +91,8 @@ export function MovieCard({ movie, cinema }: MovieCardProps) {
           {s.detail && <span className="detail">{s.detail}</span>}
         </a>
       ))}
-      <button className="ignore-btn" onClick={handleToggle} title="Ignore">
-        ✕
+      <button className="ignore-btn" onClick={handleToggle} title="Stop notifications for this movie">
+        Ignore
       </button>
       {error && <div className="ignore-error">{error}</div>}
     </div>

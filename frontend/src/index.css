@@ -218,4 +218,22 @@
  .pref-input:focus{outline:none;border-color:var(--gold)}
  .pref-verified{color:var(--ok);font-size:.8rem}
  .pref-verify-prompt{color:var(--faint);font-size:.8rem}
- .pref-error{color:var(--bad);font-size:.9rem}
+  .pref-error{color:var(--bad);font-size:.9rem}
+
+  .ignore-btn{
+   position:absolute;top:.5rem;right:.6rem;
+   background:none;border:1px solid var(--edge);color:var(--dim);
+   border-radius:4px;padding:.15rem .45rem;font-size:.7rem;cursor:pointer;
+   opacity:0;transition:opacity .15s,color .15s,border-color .15s;
+  }
+  .card:hover .ignore-btn{opacity:1}
+  .ignore-btn:hover{color:var(--gold);border-color:var(--gold)}
+  .ignore-btn-show{opacity:1;color:var(--gold);border-color:var(--gold)}
+  .ignore-btn-show:hover{background:rgba(232,179,77,.15)}
+  .ignored-card{background:#161109}
+  .ignored-row{display:flex;align-items:center;gap:.6rem;padding:.2rem 0}
+  .ignored-title{font-family:'Limelight',system-ui,sans-serif;font-weight:400;
+   font-size:1rem;letter-spacing:.06em;color:var(--dim)}
+  .ignored-badge{color:var(--faint);font-size:.72rem;letter-spacing:.08em;
+   border:1px solid var(--edge);border-radius:3px;padding:.05rem .35rem}
+  .ignore-error{color:var(--err);font-size:.75rem;margin-top:.3rem}
