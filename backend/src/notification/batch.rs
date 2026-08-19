@@ -192,11 +192,12 @@ async fn load_batch_showings(
     batch_id: i64,
 ) -> sqlx::Result<(Vec<Showing>, HashMap<String, MovieMeta>)> {
     let rows: Vec<BatchShowingRow> = sqlx::query_as(
-        "SELECT m.cinema, m.title AS movie, s.start, s.version, s.hall, s.url,
+        "SELECT c.name AS cinema, m.title AS movie, s.start, s.version, s.hall, s.url,
                 m.runtime_min, m.genres
          FROM notification_batch_showing nbs
          JOIN showing s ON s.id = nbs.showing_id
          JOIN movie m ON m.id = s.movie_id
+         JOIN cinema c ON c.id = m.cinema_id
          WHERE nbs.batch_id = $1
          ORDER BY s.start",
     )
