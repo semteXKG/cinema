@@ -25,9 +25,9 @@ pub async fn upsert_movie(
     poster_file: Option<&str>,
 ) -> sqlx::Result<i64> {
     let row: (i64,) = sqlx::query_as(
-        "INSERT INTO movie (cinema, title, runtime_min, genres, poster_url, poster_file)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (cinema, title) DO UPDATE SET
+        "INSERT INTO movie (cinema_id, title, runtime_min, genres, poster_url, poster_file)
+         VALUES ((SELECT id FROM cinema WHERE name = $1), $2, $3, $4, $5, $6)
+         ON CONFLICT (cinema_id, title) DO UPDATE SET
            runtime_min = EXCLUDED.runtime_min,
            genres      = EXCLUDED.genres,
            poster_url  = EXCLUDED.poster_url,
@@ -73,11 +73,13 @@ pub async fn insert_showing(
 
 pub async fn upcoming_view(pool: &PgPool, since: DateTime<Utc>) -> sqlx::Result<Vec<ShowingView>> {
     sqlx::query_as(
-        "SELECT m.cinema, m.title AS movie, s.start, s.version, s.hall, s.url,
+        "SELECT c.name AS cinema, m.title AS movie, s.start, s.version, s.hall, s.url,
                 m.runtime_min, m.genres, m.poster_file
-         FROM showing s JOIN movie m ON m.id = s.movie_id
+         FROM showing s
+         JOIN movie m ON m.id = s.movie_id
+         JOIN cinema c ON c.id = m.cinema_id
          WHERE s.start >= $1
-         ORDER BY s.start, m.cinema",
+         ORDER BY s.start, c.name",
     )
     .bind(since)
     .fetch_all(pool)
@@ -312,8 +314,9 @@ pub async fn set_ignored(
     title: &str,
 ) -> sqlx::Result<()> {
     sqlx::query(
-        "INSERT INTO movie_ignore (user_id, cinema, title) VALUES ($1, $2, $3)
-         ON CONFLICT (user_id, cinema, title) DO NOTHING",
+        "INSERT INTO movie_ignore (user_id, cinema_id, title)
+         VALUES ($1, (SELECT id FROM cinema WHERE name = $2), $3)
+         ON CONFLICT (user_id, cinema_id, title) DO NOTHING",
     )
     .bind(user_id)
     .bind(cinema)
@@ -329,7 +332,8 @@ pub async fn unset_ignored(
     cinema: &str,
     title: &str,
 ) -> sqlx::Result<()> {
-    sqlx::query("DELETE FROM movie_ignore WHERE user_id = $1 AND cinema = $2 AND title = $3")
+    sqlx::query("DELETE FROM movie_ignore
+ WHERE user_id = $1 AND cinema_id = (SELECT id FROM cinema WHERE name = $2) AND title = $3")
         .bind(user_id)
         .bind(cinema)
         .bind(title)
@@ -340,7 +344,7 @@ pub async fn unset_ignored(
 
 pub async fn ignored_keys(pool: &PgPool, user_id: i64) -> sqlx::Result<HashSet<(String, String)>> {
     let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT cinema, title FROM movie_ignore WHERE user_id = $1")
+        sqlx::query_as("SELECT c.name, mi.title FROM movie_ignore mi JOIN cinema c ON c.id = mi.cinema_id WHERE mi.user_id = $1")
             .bind(user_id)
             .fetch_all(pool)
             .await?;
