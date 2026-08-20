@@ -88,7 +88,6 @@ mod tests {
                 telegram_handle: Some("myhandle".into()),
                 digest_anchor: None,
                 digest_hour: None,
-                ..Default::default()
             },
         )
         .await

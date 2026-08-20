@@ -202,21 +202,6 @@ pub fn parse_megaplex_film_page(
     Ok((showings, metas))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn megaplex_features_from_version() {
-        let version = megaplex_version("OV - IMAX 2D").unwrap();
-        let combined = format!("{version} ");
-        assert_eq!(
-            crate::models::extract_features(&combined),
-            vec!["OV", "IMAX", "2D"]
-        );
-    }
-}
-
 pub async fn fetch_megaplex(
     http: &HttpClient,
     today: NaiveDate,
@@ -255,4 +240,19 @@ pub async fn fetch_megaplex(
         }
     }
     Ok((showings, metas))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn megaplex_features_from_version() {
+        let version = megaplex_version("OV - IMAX 2D").unwrap();
+        let combined = format!("{version} ");
+        assert_eq!(
+            crate::models::extract_features(&combined),
+            vec!["OV", "IMAX", "2D"]
+        );
+    }
 }

@@ -338,7 +338,6 @@ mod tests {
                 telegram_handle: handle.map(|s| s.to_string()),
                 digest_anchor,
                 digest_hour,
-                ..Default::default()
             },
         )
         .await
@@ -450,6 +449,7 @@ mod tests {
     }
 
     #[derive(Default)]
+    #[allow(dead_code)]
     struct RecordingTelegram {
         sent: Arc<Mutex<Vec<(String, String)>>>,
     }

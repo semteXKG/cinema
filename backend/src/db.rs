@@ -45,6 +45,7 @@ pub async fn upsert_movie(
     Ok(row.0)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_showing(
     pool: &PgPool,
     movie_id: i64,

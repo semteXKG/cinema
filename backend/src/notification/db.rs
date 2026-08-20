@@ -23,16 +23,6 @@ pub struct PreferenceUpdate {
     pub telegram_handle: Option<String>,
     pub digest_anchor: Option<DateTime<Utc>>,
     pub digest_hour: Option<i32>,
-    #[deprecated(
-        since = "0.0.0",
-        note = "removed in favor of email_enabled/telegram_enabled"
-    )]
-    pub email_frequency: Option<String>,
-    #[deprecated(
-        since = "0.0.0",
-        note = "removed in favor of email_enabled/telegram_enabled"
-    )]
-    pub telegram_frequency: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -52,6 +42,7 @@ pub struct DueBatch {
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NotificationRule {
     pub id: i64,
+    #[allow(dead_code)]
     pub user_id: i64,
     pub position: i32,
     pub cinema_id: Option<i64>,
@@ -120,7 +111,9 @@ pub struct UserRules {
     pub email_enabled: bool,
     pub telegram_enabled: bool,
     pub telegram_chat_id: Option<String>,
+    #[allow(dead_code)]
     pub digest_anchor: DateTime<Utc>,
+    #[allow(dead_code)]
     pub digest_hour: i32,
     pub rules: Vec<Rule>,
 }
@@ -448,7 +441,6 @@ mod tests {
                 telegram_handle: handle.map(|s| s.to_string()),
                 digest_anchor,
                 digest_hour,
-                ..Default::default()
             },
         )
         .await
@@ -505,7 +497,6 @@ mod tests {
                 telegram_handle: Some("@MyHandle".into()),
                 digest_anchor: None,
                 digest_hour: Some(10),
-                ..Default::default()
             },
         )
         .await
@@ -542,7 +533,6 @@ mod tests {
                 telegram_handle: Some("myhandle".into()),
                 digest_anchor: None,
                 digest_hour: None,
-                ..Default::default()
             },
         )
         .await

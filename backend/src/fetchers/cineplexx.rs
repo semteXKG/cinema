@@ -121,26 +121,6 @@ pub fn parse_cineplexx_showings(
     (showings, metas)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn cineplexx_features_from_session_arrays() {
-        let session = json!({
-            "technologies": [["2D", "OV (Englisch)", "IMAX"], []],
-            "conceptAttributesNames": ["OV"],
-            "screenName": "Saal 6"
-        });
-        let text = cineplexx_feature_text(&session, "OV");
-        assert_eq!(
-            crate::models::extract_features(&text),
-            vec!["OV", "IMAX", "2D"]
-        );
-    }
-}
-
 pub fn cineplexx_feature_text(session: &serde_json::Value, version: &str) -> String {
     let mut parts: Vec<String> = vec![version.to_string()];
     if let Some(screen) = session.get("screenName").and_then(|v| v.as_str()) {
@@ -188,5 +168,25 @@ fn cineplexx_meta(movie: &serde_json::Value) -> MovieMeta {
         runtime_min,
         genres,
         poster,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn cineplexx_features_from_session_arrays() {
+        let session = json!({
+            "technologies": [["2D", "OV (Englisch)", "IMAX"], []],
+            "conceptAttributesNames": ["OV"],
+            "screenName": "Saal 6"
+        });
+        let text = cineplexx_feature_text(&session, "OV");
+        assert_eq!(
+            crate::models::extract_features(&text),
+            vec!["OV", "IMAX", "2D"]
+        );
     }
 }

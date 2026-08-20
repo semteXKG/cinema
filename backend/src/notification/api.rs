@@ -26,8 +26,6 @@ impl From<PreferenceUpdateRequest> for crate::notification::db::PreferenceUpdate
             telegram_handle: req.telegram_handle,
             digest_anchor: req.digest_anchor,
             digest_hour: req.digest_hour,
-            email_frequency: None,
-            telegram_frequency: None,
         }
     }
 }
