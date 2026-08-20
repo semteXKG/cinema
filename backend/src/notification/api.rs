@@ -261,6 +261,7 @@ async fn put_rules(
             features: r.features,
             title_substring: r.title_substring,
             frequency: r.frequency,
+            channels: vec!["email".into()],
         })
         .collect();
     crate::notification::db::replace_rules(&state.pool, auth.user_id, &input)

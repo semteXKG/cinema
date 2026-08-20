@@ -49,6 +49,7 @@ pub struct NotificationRule {
     pub features: Vec<String>,
     pub title_substring: Option<String>,
     pub frequency: String,
+    pub channels: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,11 +58,12 @@ pub struct RuleInput {
     pub features: Vec<String>,
     pub title_substring: Option<String>,
     pub frequency: String,
+    pub channels: Vec<String>,
 }
 
 pub async fn list_rules(pool: &PgPool, user_id: i64) -> sqlx::Result<Vec<NotificationRule>> {
     sqlx::query_as(
-        "SELECT id, user_id, position, cinema_id, features, title_substring, frequency
+        "SELECT id, user_id, position, cinema_id, features, title_substring, frequency, channels
          FROM notification_rule WHERE user_id = $1 ORDER BY position",
     )
     .bind(user_id)
@@ -82,8 +84,8 @@ pub async fn replace_rules(
     for (i, r) in input.iter().enumerate() {
         sqlx::query(
             "INSERT INTO notification_rule
-               (user_id, position, cinema_id, features, title_substring, frequency)
-             VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6)",
+               (user_id, position, cinema_id, features, title_substring, frequency, channels)
+             VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7)",
         )
         .bind(user_id)
         .bind(i as i32)
@@ -91,11 +93,12 @@ pub async fn replace_rules(
         .bind(&r.features)
         .bind(r.title_substring.as_deref())
         .bind(&r.frequency)
+        .bind(&r.channels)
         .execute(&mut *tx)
         .await?;
     }
     let rows = sqlx::query_as::<_, NotificationRule>(
-        "SELECT id, user_id, position, cinema_id, features, title_substring, frequency
+        "SELECT id, user_id, position, cinema_id, features, title_substring, frequency, channels
          FROM notification_rule WHERE user_id = $1 ORDER BY position",
     )
     .bind(user_id)
@@ -147,7 +150,7 @@ pub async fn list_active_users_with_rules(pool: &PgPool) -> sqlx::Result<Vec<Use
     let mut out = Vec::with_capacity(prefs.len());
     for p in prefs {
         let rules: Vec<NotificationRule> = sqlx::query_as(
-            "SELECT id, user_id, position, cinema_id, features, title_substring, frequency
+            "SELECT id, user_id, position, cinema_id, features, title_substring, frequency, channels
              FROM notification_rule WHERE user_id = $1 ORDER BY position",
         )
         .bind(p.user_id)
@@ -167,6 +170,7 @@ pub async fn list_active_users_with_rules(pool: &PgPool) -> sqlx::Result<Vec<Use
                     features: r.features,
                     title_substring: r.title_substring,
                     frequency: r.frequency,
+                    channels: r.channels,
                 })
                 .collect(),
         });
@@ -852,6 +856,7 @@ mod tests {
             features: features.iter().map(|s| s.to_string()).collect(),
             title_substring: title.map(|s| s.to_string()),
             frequency: freq.to_string(),
+            channels: vec!["email".into()],
         }
     }
 
@@ -897,6 +902,38 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn replace_rules_round_trips_channels(pool: PgPool) {
+        let uid = make_rule_user(&pool).await;
+        let inserted = replace_rules(
+            &pool,
+            uid,
+            &[
+                RuleInput {
+                    cinema_id: None,
+                    features: vec![],
+                    title_substring: None,
+                    frequency: "3".into(),
+                    channels: vec!["email".into(), "telegram".into()],
+                },
+                RuleInput {
+                    cinema_id: None,
+                    features: vec![],
+                    title_substring: None,
+                    frequency: "immediately".into(),
+                    channels: vec!["telegram".into()],
+                },
+            ],
+        )
+        .await
+        .unwrap();
+        assert_eq!(inserted[0].channels, vec!["email", "telegram"]);
+        assert_eq!(inserted[1].channels, vec!["telegram"]);
+        let listed = list_rules(&pool, uid).await.unwrap();
+        assert_eq!(listed[0].channels, vec!["email", "telegram"]);
+        assert_eq!(listed[1].channels, vec!["telegram"]);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn list_cinemas_returns_known(pool: PgPool) {
         let cinemas = list_cinemas(&pool).await.unwrap();
         let names: Vec<String> = cinemas.iter().map(|(_, n)| n.clone()).collect();
@@ -920,6 +957,7 @@ mod tests {
                 features: vec![],
                 title_substring: None,
                 frequency: "3".into(),
+                channels: vec!["email".into()],
             }],
         )
         .await

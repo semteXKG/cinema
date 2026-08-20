@@ -50,17 +50,21 @@ pub async fn route_showing_for_users(
 ) -> sqlx::Result<Vec<(i64, String)>> {
     let mut affected: Vec<(i64, String)> = Vec::new();
     for u in users {
-        let freq = first_match(&u.rules, showing).unwrap_or("never");
-        if freq == "never" {
+        let Some(rule) = first_match(&u.rules, showing) else {
+            continue;
+        };
+        if rule.frequency == "never" {
             continue;
         }
         if u.email_enabled {
-            let batch_id = db::get_or_create_open_batch(pool, u.user_id, "email", freq).await?;
+            let batch_id =
+                db::get_or_create_open_batch(pool, u.user_id, "email", &rule.frequency).await?;
             db::append_showing_to_batch(pool, batch_id, showing_id).await?;
             affected.push((u.user_id, "email".to_string()));
         }
         if u.telegram_enabled && u.telegram_chat_id.is_some() {
-            let batch_id = db::get_or_create_open_batch(pool, u.user_id, "telegram", freq).await?;
+            let batch_id =
+                db::get_or_create_open_batch(pool, u.user_id, "telegram", &rule.frequency).await?;
             db::append_showing_to_batch(pool, batch_id, showing_id).await?;
             affected.push((u.user_id, "telegram".to_string()));
         }
@@ -382,6 +386,7 @@ mod tests {
             features: vec![],
             title_substring: None,
             frequency: freq.to_string(),
+            channels: vec!["email".into()],
         }
     }
 
@@ -526,6 +531,7 @@ mod tests {
                 features: vec![],
                 title_substring: None,
                 frequency: "immediately".to_string(),
+                channels: vec!["email".into()],
             }],
         )];
         let affected = route_showing_for_users(&pool, sid, &m, &users)

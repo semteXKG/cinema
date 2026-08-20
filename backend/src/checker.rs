@@ -628,6 +628,7 @@ mod tests {
                 features: vec![],
                 title_substring: None,
                 frequency: "immediately".into(),
+                channels: vec!["email".into()],
             }],
         )
         .await
@@ -680,6 +681,7 @@ mod tests {
                 features: vec![],
                 title_substring: None,
                 frequency: "immediately".into(),
+                channels: vec!["email".into()],
             }],
         )
         .await

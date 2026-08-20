@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rule {
     pub cinema_id: Option<i64>,
     pub features: Vec<String>,
     pub title_substring: Option<String>,
     pub frequency: String,
+    pub channels: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,10 +39,10 @@ pub fn matches(rule: &Rule, s: &MatchableShowing) -> bool {
     true
 }
 
-pub fn first_match<'a>(rules: &'a [Rule], s: &MatchableShowing) -> Option<&'a str> {
+pub fn first_match<'a>(rules: &'a [Rule], s: &MatchableShowing) -> Option<&'a Rule> {
     for r in rules {
         if matches(r, s) {
-            return Some(&r.frequency);
+            return Some(r);
         }
     }
     None
@@ -57,6 +58,7 @@ mod tests {
             features: features.iter().map(|s| s.to_string()).collect(),
             title_substring: title.map(|s| s.to_string()),
             frequency: freq.to_string(),
+            channels: vec!["email".into()],
         }
     }
 
@@ -111,10 +113,13 @@ mod tests {
             rule(None, &[], None, "3"),
         ];
         assert_eq!(
-            first_match(&rules, &showing(7, &["IMAX"], "X")),
+            first_match(&rules, &showing(7, &["IMAX"], "X")).map(|r| r.frequency.as_str()),
             Some("immediately")
         );
-        assert_eq!(first_match(&rules, &showing(8, &["OV"], "Y")), Some("3"));
+        assert_eq!(
+            first_match(&rules, &showing(8, &["OV"], "Y")).map(|r| r.frequency.as_str()),
+            Some("3")
+        );
     }
 
     #[test]
