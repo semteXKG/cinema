@@ -52,8 +52,6 @@ export const FREQUENCY_OPTIONS: NotificationFrequency[] = [
 ];
 
 export interface NotificationPreferences {
-  emailEnabled: boolean;
-  telegramEnabled: boolean;
   telegramHandle: string;
   telegramVerified: boolean;
   digestAnchor: string;
@@ -65,6 +63,8 @@ export type Feature = (typeof FEATURES)[number];
 
 export interface Cinema { id: number; name: string; }
 
+export type NotificationChannel = "email" | "telegram" | "both";
+
 export interface NotificationRule {
   id?: number;
   position: number;
@@ -73,6 +73,7 @@ export interface NotificationRule {
   features: string[];
   titleSubstring: string | null;
   frequency: NotificationFrequency;
+  channel: NotificationChannel;
 }
 
 export interface RulesResponse { rules: NotificationRule[]; cinemas: Cinema[]; }

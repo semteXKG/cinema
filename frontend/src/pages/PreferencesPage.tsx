@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Marquee } from "../components/Marquee";
-import { FEATURES, FREQUENCY_OPTIONS, type NotificationFrequency, type NotificationPreferences, type NotificationRule, type Cinema } from "../types";
+import { FEATURES, FREQUENCY_OPTIONS, type NotificationChannel, type NotificationFrequency, type NotificationPreferences, type NotificationRule, type Cinema } from "../types";
 import { fetchPreferences, savePreferences, fetchRules, saveRules } from "../api/preferences";
 
 function frequencyLabel(t: TFunction, value: NotificationFrequency): string {
@@ -45,7 +45,7 @@ export function PreferencesPage() {
   const handleSave = async () => {
     if (!prefs) return;
     try {
-      const updated = await savePreferences(prefs);
+      const updated = await savePreferences({ telegramHandle: prefs.telegramHandle });
       setPrefs(updated);
       setSaved(true);
       setError(null);
@@ -54,7 +54,7 @@ export function PreferencesPage() {
     }
   };
 
-  const addRule = () => setRules([...rules, { position: rules.length, cinemaId: null, features: [], titleSubstring: null, frequency: "3" }]);
+  const addRule = () => setRules([...rules, { position: rules.length, cinemaId: null, features: [], titleSubstring: null, frequency: "3", channel: "both" }]);
   const removeRule = (i: number) => setRules(rules.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, position: idx })));
   const updateRule = (i: number, patch: Partial<NotificationRule>) => setRules(rules.map((r, idx) => idx === i ? { ...r, ...patch } : r));
   const toggleFeature = (i: number, f: string) => setRules(rules.map((r, idx) => idx === i ? { ...r, features: r.features.includes(f) ? r.features.filter((x) => x !== f) : [...r.features, f] } : r));
@@ -64,52 +64,35 @@ export function PreferencesPage() {
   if (error) return <div className="preferences"><Marquee /><p className="pref-error">{error}</p></div>;
   if (!prefs) return null;
 
-  const channels: Array<{ name: "email" | "telegram"; enabled: boolean; onChange: (v: boolean) => void }> = [
-    { name: "email", enabled: prefs.emailEnabled, onChange: (v) => setPrefs({ ...prefs, emailEnabled: v }) },
-    { name: "telegram", enabled: prefs.telegramEnabled, onChange: (v) => setPrefs({ ...prefs, telegramEnabled: v }) },
-  ];
+  const telegramUnverified = !prefs.telegramVerified;
+  const channels: NotificationChannel[] = ["email", "telegram", "both"];
 
   return (
     <div className="preferences">
       <Marquee />
       <h2>{t("preferences.title")}</h2>
-      {channels.map((c) => (
-        <div className="card pref-card" key={c.name}>
-          <h3>{t(`preferences.${c.name}`)}</h3>
-          <p className="pref-desc">{t(`preferences.${c.name}Desc`)}</p>
-          <label className="pref-field">
-            <span>{t("preferences." + c.name)}</span>
-            <input
-              type="checkbox"
-              aria-label={t("preferences." + c.name)}
-              checked={c.enabled}
-              onChange={(e) => c.onChange(e.target.checked)}
-            />
-          </label>
-          {c.name === "telegram" && (
-            <label className="pref-field">
-              <span>{t("preferences.telegramHandle")}</span>
-              <input
-                className="pref-input"
-                type="text"
-                placeholder={t("preferences.telegramHandlePlaceholder")}
-                value={prefs.telegramHandle ?? ""}
-                onChange={(e) => setPrefs({ ...prefs, telegramHandle: e.target.value })}
-                aria-label={t("preferences.telegramHandle")}
-              />
-            </label>
-          )}
-          {c.name === "telegram" && (
-            <div className="pref-telegram-status">
-              {prefs.telegramVerified ? (
-                <span className="pref-verified">{t("preferences.telegramVerified")}</span>
-              ) : prefs.telegramHandle ? (
-                <span className="pref-verify-prompt">{t("preferences.telegramVerifyPrompt")}</span>
-              ) : null}
-            </div>
-          )}
+      <div className="card pref-card">
+        <h3>{t("preferences.telegram")}</h3>
+        <p className="pref-desc">{t("preferences.telegramDesc")}</p>
+        <label className="pref-field">
+          <span>{t("preferences.telegramHandle")}</span>
+          <input
+            className="pref-input"
+            type="text"
+            placeholder={t("preferences.telegramHandlePlaceholder")}
+            value={prefs.telegramHandle ?? ""}
+            onChange={(e) => setPrefs({ ...prefs, telegramHandle: e.target.value })}
+            aria-label={t("preferences.telegramHandle")}
+          />
+        </label>
+        <div className="pref-telegram-status">
+          {prefs.telegramVerified ? (
+            <span className="pref-verified">{t("preferences.telegramVerified")}</span>
+          ) : prefs.telegramHandle ? (
+            <span className="pref-verify-prompt">{t("preferences.telegramVerifyPrompt")}</span>
+          ) : null}
         </div>
-      ))}
+      </div>
       <div className="pref-actions">
         <button className="auth-submit" onClick={handleSave}>{t("preferences.save")}</button>
         {saved && <span className="pref-saved">{t("preferences.saved")}</span>}
@@ -124,21 +107,29 @@ export function PreferencesPage() {
               {cinemas.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <input aria-label={"Rule " + (i + 1) + " title"} placeholder={t("preferences.anyTitle")} value={r.titleSubstring ?? ""} onChange={(e) => updateRule(i, { titleSubstring: e.target.value || null })} />
+            <select aria-label={"Rule " + (i + 1) + " channel"} value={r.channel} onChange={(e) => updateRule(i, { channel: e.target.value as NotificationChannel })}>
+              {channels.map((c) => <option key={c} value={c}>{t("preferences.channel" + (c.charAt(0).toUpperCase() + c.slice(1)))}</option>)}
+            </select>
             <select aria-label={"Rule " + (i + 1) + " frequency"} value={r.frequency} onChange={(e) => updateRule(i, { frequency: e.target.value as NotificationFrequency })}>
               {FREQUENCY_OPTIONS.map((v) => <option key={v} value={v}>{frequencyLabel(t, v)}</option>)}
             </select>
-            <button className="mock-button" onClick={() => removeRule(i)}>{"x"}</button>
+            <button className="rule-remove" onClick={() => removeRule(i)}>x</button>
           </div>
           <div className="rule-features">
             {FEATURES.map((f) => (
               <button key={f} className={"chip " + (r.features.includes(f) ? "chip-on" : "")} onClick={() => toggleFeature(i, f)}>{f}</button>
             ))}
+            {(r.channel === "telegram" || r.channel === "both") && telegramUnverified && (
+              <span className="rule-warn">{t("preferences.telegramUnverified")}</span>
+            )}
           </div>
         </div>
       ))}
-      <button className="auth-submit" onClick={addRule}>{t("preferences.addRule")}</button>
-      <button className="auth-submit" onClick={handleSaveRules}>{t("preferences.saveRules")}</button>
-      {rulesSaved && <span className="pref-saved">{t("preferences.saved")}</span>}
+      <div className="pref-actions">
+        <button className="auth-submit" onClick={addRule}>{t("preferences.addRule")}</button>
+        <button className="auth-submit" onClick={handleSaveRules}>{t("preferences.saveRules")}</button>
+        {rulesSaved && <span className="pref-saved">{t("preferences.saved")}</span>}
+      </div>
     </div>
   );
 }
