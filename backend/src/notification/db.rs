@@ -111,7 +111,9 @@ pub async fn replace_rules(
 #[derive(Debug, Clone)]
 pub struct UserRules {
     pub user_id: i64,
+    #[allow(dead_code)]
     pub email_enabled: bool,
+    #[allow(dead_code)]
     pub telegram_enabled: bool,
     pub telegram_chat_id: Option<String>,
     #[allow(dead_code)]

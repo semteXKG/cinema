@@ -56,13 +56,13 @@ pub async fn route_showing_for_users(
         if rule.frequency == "never" {
             continue;
         }
-        if u.email_enabled {
+        if rule.channels.iter().any(|c| c == "email") {
             let batch_id =
                 db::get_or_create_open_batch(pool, u.user_id, "email", &rule.frequency).await?;
             db::append_showing_to_batch(pool, batch_id, showing_id).await?;
             affected.push((u.user_id, "email".to_string()));
         }
-        if u.telegram_enabled && u.telegram_chat_id.is_some() {
+        if rule.channels.iter().any(|c| c == "telegram") && u.telegram_chat_id.is_some() {
             let batch_id =
                 db::get_or_create_open_batch(pool, u.user_id, "telegram", &rule.frequency).await?;
             db::append_showing_to_batch(pool, batch_id, showing_id).await?;
@@ -381,12 +381,16 @@ mod tests {
     }
 
     fn rule(freq: &str) -> crate::notification::rules::Rule {
+        rule_with_channels(freq, vec!["email".into()])
+    }
+
+    fn rule_with_channels(freq: &str, channels: Vec<String>) -> crate::notification::rules::Rule {
         crate::notification::rules::Rule {
             cinema_id: None,
             features: vec![],
             title_substring: None,
             frequency: freq.to_string(),
-            channels: vec!["email".into()],
+            channels,
         }
     }
 
@@ -559,7 +563,7 @@ mod tests {
             false,
             false,
             None,
-            vec![rule("immediately")],
+            vec![rule_with_channels("immediately", vec![])],
         )];
         let affected = route_showing_for_users(&pool, sid, &m, &users)
             .await
@@ -623,7 +627,7 @@ mod tests {
             false,
             true,
             Some("12345"),
-            vec![rule("immediately")],
+            vec![rule_with_channels("immediately", vec!["telegram".into()])],
         )];
         route_showing_for_users(&pool, sid, &m, &users)
             .await
@@ -659,6 +663,87 @@ mod tests {
         assert_eq!(sent, 1);
         assert_eq!(batch_status(&pool, batch_id).await, "sent");
         assert_eq!(tg.sent.lock().unwrap().len(), 1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn telegram_only_rule_with_chat_id_routes_telegram_batch(pool: PgPool) {
+        let uid = make_user(&pool, "tg1@x.com").await;
+        prefs_for(&pool, uid, false, true, Some("h"), None, None).await;
+        set_chat_id(&pool, uid, "12345").await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![UserRules {
+            user_id: uid,
+            email_enabled: false,
+            telegram_enabled: true,
+            telegram_chat_id: Some("12345".into()),
+            digest_anchor: at(16, 9),
+            digest_hour: 9,
+            rules: vec![crate::notification::rules::Rule {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "immediately".into(),
+                channels: vec!["telegram".into()],
+            }],
+        }];
+        let affected = route_showing_for_users(&pool, sid, &m, &users).await.unwrap();
+        assert_eq!(affected, vec![(uid, "telegram".to_string())]);
+        let n: (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM notification_batch WHERE user_id=$1 AND layer='telegram' AND frequency='immediately' AND status='pending'",
+        ).bind(uid).fetch_one(&pool).await.unwrap();
+        assert_eq!(n.0, 1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn telegram_only_rule_without_chat_id_routes_nothing(pool: PgPool) {
+        let uid = make_user(&pool, "tg2@x.com").await;
+        prefs_for(&pool, uid, false, true, Some("h"), None, None).await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![UserRules {
+            user_id: uid,
+            email_enabled: false,
+            telegram_enabled: true,
+            telegram_chat_id: None,
+            digest_anchor: at(16, 9),
+            digest_hour: 9,
+            rules: vec![crate::notification::rules::Rule {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "immediately".into(),
+                channels: vec!["telegram".into()],
+            }],
+        }];
+        let affected = route_showing_for_users(&pool, sid, &m, &users).await.unwrap();
+        assert!(affected.is_empty());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn both_channels_routes_email_and_telegram_batches(pool: PgPool) {
+        let uid = make_user(&pool, "both@x.com").await;
+        prefs_for(&pool, uid, true, true, Some("h"), None, None).await;
+        set_chat_id(&pool, uid, "999").await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![UserRules {
+            user_id: uid,
+            email_enabled: true,
+            telegram_enabled: true,
+            telegram_chat_id: Some("999".into()),
+            digest_anchor: at(16, 9),
+            digest_hour: 9,
+            rules: vec![crate::notification::rules::Rule {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "immediately".into(),
+                channels: vec!["email".into(), "telegram".into()],
+            }],
+        }];
+        let affected = route_showing_for_users(&pool, sid, &m, &users).await.unwrap();
+        assert_eq!(affected, vec![(uid, "email".to_string()), (uid, "telegram".to_string())]);
     }
 
     #[sqlx::test(migrations = "./migrations")]

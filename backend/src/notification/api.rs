@@ -164,6 +164,7 @@ pub struct RuleRequest {
     pub features: Vec<String>,
     pub title_substring: Option<String>,
     pub frequency: String,
+    pub channels: Vec<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -176,6 +177,7 @@ pub struct RuleResponse {
     pub features: Vec<String>,
     pub title_substring: Option<String>,
     pub frequency: String,
+    pub channels: Vec<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -231,6 +233,7 @@ async fn get_rules(
             features: r.features,
             title_substring: r.title_substring,
             frequency: r.frequency,
+            channels: r.channels,
         })
         .collect();
     let cinemas = cinemas
@@ -261,7 +264,7 @@ async fn put_rules(
             features: r.features,
             title_substring: r.title_substring,
             frequency: r.frequency,
-            channels: vec!["email".into()],
+            channels: r.channels,
         })
         .collect();
     crate::notification::db::replace_rules(&state.pool, auth.user_id, &input)
@@ -288,6 +291,7 @@ fn validate_rules(
             || f == "immediately"
             || matches!(f.parse::<i32>(), Ok(d) if (1..=7).contains(&d))
     };
+    let valid_channels = ["email", "telegram"];
     for r in rules {
         if !is_freq(&r.frequency) {
             return Err(StatusCode::BAD_REQUEST);
@@ -306,6 +310,9 @@ fn validate_rules(
             if !cinemas.contains_key(&cid) {
                 return Err(StatusCode::BAD_REQUEST);
             }
+        }
+        if r.channels.is_empty() || !r.channels.iter().all(|c| valid_channels.contains(&c.as_str())) {
+            return Err(StatusCode::BAD_REQUEST);
         }
     }
     Ok(())
@@ -634,7 +641,7 @@ mod tests {
             .unwrap();
         let token = make_session(&pool, uid).await;
         let app = crate::web::router(test_state(pool.clone()));
-        let body = r#"{"rules":[{"cinemaId":1,"features":["IMAX","Atmos"],"titleSubstring":null,"frequency":"immediately"},{"cinemaId":null,"features":[],"titleSubstring":null,"frequency":"3"}]}"#;
+        let body = r#"{"rules":[{"cinemaId":1,"features":["IMAX","Atmos"],"titleSubstring":null,"frequency":"immediately","channels":["email","telegram"]},{"cinemaId":null,"features":[],"titleSubstring":null,"frequency":"3","channels":["email"]}]}"#;
         let resp = app
             .oneshot(
                 Request::put("/api/preferences/rules")
@@ -662,6 +669,32 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn put_rules_rejects_empty_channels(pool: PgPool) {
+        let uid = seed_rules_user(&pool).await;
+        let token = make_session(&pool, uid).await;
+        let app = crate::web::router(test_state(pool));
+        let resp = app.oneshot(
+            Request::put("/api/preferences/rules").header("Cookie", format!("ov_session={token}"))
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(r#"{"rules":[{"cinemaId":null,"features":[],"titleSubstring":null,"frequency":"immediately","channels":[]}]}"#)).unwrap()
+        ).await.unwrap();
+        assert_eq!(resp.status(), 400);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn put_rules_rejects_invalid_channel(pool: PgPool) {
+        let uid = seed_rules_user(&pool).await;
+        let token = make_session(&pool, uid).await;
+        let app = crate::web::router(test_state(pool));
+        let resp = app.oneshot(
+            Request::put("/api/preferences/rules").header("Cookie", format!("ov_session={token}"))
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(r#"{"rules":[{"cinemaId":null,"features":[],"titleSubstring":null,"frequency":"immediately","channels":["fax"]}]}"#)).unwrap()
+        ).await.unwrap();
+        assert_eq!(resp.status(), 400);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn put_rules_rejects_bad_frequency(pool: PgPool) {
         let uid = seed_rules_user(&pool).await;
         let token = make_session(&pool, uid).await;
@@ -669,7 +702,7 @@ mod tests {
         let resp = app.oneshot(
             Request::put("/api/preferences/rules").header("Cookie", format!("ov_session={token}"))
                 .header("Content-Type", "application/json")
-                .body(axum::body::Body::from(r#"{"rules":[{"cinemaId":null,"features":[],"titleSubstring":null,"frequency":"sometimes"}]}"#)).unwrap()
+                .body(axum::body::Body::from(r#"{"rules":[{"cinemaId":null,"features":[],"titleSubstring":null,"frequency":"sometimes","channels":["email"]}]}"#)).unwrap()
         ).await.unwrap();
         assert_eq!(resp.status(), 400);
     }
