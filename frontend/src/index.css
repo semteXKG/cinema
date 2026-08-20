@@ -236,4 +236,29 @@
    font-size:1rem;letter-spacing:.06em;color:var(--dim)}
   .ignored-badge{color:var(--faint);font-size:.72rem;letter-spacing:.08em;
    border:1px solid var(--edge);border-radius:3px;padding:.05rem .35rem}
-  .ignore-error{color:var(--err);font-size:.75rem;margin-top:.3rem}
+   .ignore-error{color:var(--err);font-size:.75rem;margin-top:.3rem}
+   .rule-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+   .rule-row select,.rule-row input{
+    background:var(--bg);border:1px solid var(--edge);color:var(--text);
+    border-radius:4px;padding:.3rem .5rem;font-size:.8rem;
+   }
+   .rule-row select:focus,.rule-row input:focus{outline:none;border-color:var(--gold)}
+   .rule-remove{
+    background:transparent;border:1px solid var(--edge);color:var(--err);
+    border-radius:4px;padding:.15rem .45rem;font-size:.75rem;cursor:pointer;
+    margin-left:auto;
+   }
+   .rule-remove:hover{border-color:var(--err);background:rgba(224,122,106,.12)}
+   .rule-features{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.5rem}
+   .chip{
+    background:var(--panel);border:1px solid var(--edge);color:var(--dim);
+    border-radius:999px;padding:.2rem .6rem;font-size:.72rem;cursor:pointer;
+    transition:background .12s ease,border-color .12s ease,color .12s ease;
+   }
+   .chip:hover{color:var(--text);border-color:var(--gold)}
+   .chip-on{background:rgba(232,179,77,.18);border-color:var(--gold);color:var(--gold-bright)}
+   .rule-warn{color:var(--err);font-size:.7rem;margin-left:.4rem}
+   @media (max-width:560px){
+    .rule-row select,.rule-row input{flex:1 1 100%}
+    .rule-remove{margin-left:0;flex:0 0 auto}
+   }
