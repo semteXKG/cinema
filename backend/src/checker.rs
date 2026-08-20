@@ -610,16 +610,9 @@ mod tests {
         let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
             .await
             .unwrap();
-        crate::notification::db::upsert_preferences(
-            &pool,
-            uid,
-            crate::notification::db::PreferenceUpdate {
-                email_enabled: Some(true),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
+        crate::notification::db::upsert_preferences(&pool, uid, Default::default())
+            .await
+            .unwrap();
         crate::notification::db::replace_rules(
             &pool,
             uid,
@@ -663,16 +656,9 @@ mod tests {
         let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
             .await
             .unwrap();
-        crate::notification::db::upsert_preferences(
-            &pool,
-            uid,
-            crate::notification::db::PreferenceUpdate {
-                email_enabled: Some(true),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
+        crate::notification::db::upsert_preferences(&pool, uid, Default::default())
+            .await
+            .unwrap();
         crate::notification::db::replace_rules(
             &pool,
             uid,

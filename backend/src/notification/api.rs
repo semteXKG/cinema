@@ -11,8 +11,6 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PreferenceUpdateRequest {
-    pub email_enabled: Option<bool>,
-    pub telegram_enabled: Option<bool>,
     pub telegram_handle: Option<String>,
     pub digest_anchor: Option<DateTime<Utc>>,
     pub digest_hour: Option<i32>,
@@ -21,8 +19,6 @@ pub struct PreferenceUpdateRequest {
 impl From<PreferenceUpdateRequest> for crate::notification::db::PreferenceUpdate {
     fn from(req: PreferenceUpdateRequest) -> Self {
         Self {
-            email_enabled: req.email_enabled,
-            telegram_enabled: req.telegram_enabled,
             telegram_handle: req.telegram_handle,
             digest_anchor: req.digest_anchor,
             digest_hour: req.digest_hour,
@@ -33,8 +29,6 @@ impl From<PreferenceUpdateRequest> for crate::notification::db::PreferenceUpdate
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreferencesResponse {
-    pub email_enabled: bool,
-    pub telegram_enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub telegram_handle: Option<String>,
     pub telegram_verified: bool,
@@ -45,8 +39,6 @@ pub struct PreferencesResponse {
 impl From<crate::notification::db::NotificationPreferences> for PreferencesResponse {
     fn from(p: crate::notification::db::NotificationPreferences) -> Self {
         PreferencesResponse {
-            email_enabled: p.email_enabled,
-            telegram_enabled: p.telegram_enabled,
             telegram_handle: p.telegram_handle,
             telegram_verified: p.telegram_chat_id.is_some(),
             digest_anchor: p.digest_anchor,
@@ -86,18 +78,17 @@ async fn put_preferences(
     let dto = crate::notification::db::PreferenceUpdate::from(body);
     validate_update(&dto)?;
     let changed_digest = dto.digest_anchor.is_some() || dto.digest_hour.is_some();
-    let rollover_email = dto.email_enabled.is_some() || changed_digest;
-    let rollover_telegram = dto.telegram_enabled.is_some() || changed_digest;
+    let changed_handle = dto.telegram_handle.is_some();
     let updated = crate::notification::db::upsert_preferences(&state.pool, auth.user_id, dto)
         .await
         .map_err(|e| {
             tracing::error!("upsert_preferences failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    if rollover_email {
+    if changed_digest {
         rollover_batch(&state, auth.user_id, "email").await;
     }
-    if rollover_telegram {
+    if changed_digest || changed_handle {
         rollover_batch(&state, auth.user_id, "telegram").await;
     }
     Ok(Json(updated.into()))
@@ -117,7 +108,6 @@ async fn delete_telegram(
         &state.pool,
         auth.user_id,
         crate::notification::db::PreferenceUpdate {
-            telegram_enabled: Some(false),
             telegram_handle: Some(String::new()),
             ..Default::default()
         },
@@ -370,8 +360,6 @@ mod tests {
         assert_eq!(resp.status(), 200);
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["emailEnabled"], false);
-        assert_eq!(json["telegramEnabled"], false);
         assert_eq!(json["telegramVerified"], false);
         assert_eq!(json["telegramHandle"], serde_json::Value::Null);
         assert!(json["digestAnchor"].is_string());
@@ -408,7 +396,7 @@ mod tests {
                     .header("Cookie", format!("ov_session={token}"))
                     .header("Content-Type", "application/json")
                     .body(axum::body::Body::from(
-                        r#"{"emailEnabled":true,"telegramEnabled":true,"telegramHandle":"@MyHandle","digestHour":10}"#,
+                        r#"{"telegramHandle":"@MyHandle","digestHour":10}"#,
                     ))
                     .unwrap(),
             )
@@ -417,8 +405,6 @@ mod tests {
         assert_eq!(resp.status(), 200);
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["emailEnabled"], true);
-        assert_eq!(json["telegramEnabled"], true);
         assert_eq!(json["telegramHandle"], "myhandle");
         assert_eq!(json["telegramVerified"], false);
         assert_eq!(json["digestHour"], 10);
@@ -436,14 +422,12 @@ mod tests {
         assert_eq!(resp.status(), 200);
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["emailEnabled"], true);
-        assert_eq!(json["telegramEnabled"], true);
         assert_eq!(json["telegramHandle"], "myhandle");
         assert_eq!(json["digestHour"], 10);
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn put_preferences_accepts_valid_enablement(pool: PgPool) {
+    async fn put_preferences_accepts_handle_update(pool: PgPool) {
         let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
             .await
             .unwrap();
@@ -456,7 +440,7 @@ mod tests {
                 Request::put("/api/preferences")
                     .header("Cookie", format!("ov_session={token}"))
                     .header("Content-Type", "application/json")
-                    .body(axum::body::Body::from(r#"{"telegramEnabled":false}"#))
+                    .body(axum::body::Body::from(r#"{"telegramHandle":"@newhandle"}"#))
                     .unwrap(),
             )
             .await
@@ -506,7 +490,7 @@ mod tests {
                     .header("Cookie", format!("ov_session={token}"))
                     .header("Content-Type", "application/json")
                     .body(axum::body::Body::from(
-                        r#"{"emailEnabled":true,"telegramEnabled":true}"#,
+                        r#"{"telegramHandle":"@h"}"#,
                     ))
                     .unwrap(),
             )
@@ -520,7 +504,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(email_count.0, 0, "open email batch should be rolled over");
+        assert_eq!(email_count.0, 1, "email batch not rolled over (handle-only change)");
         let telegram_count: (i64,) =
             sqlx::query_as("SELECT count(*) FROM notification_batch WHERE user_id = $1 AND layer = 'telegram' AND status = 'pending'")
                 .bind(uid)
@@ -534,7 +518,7 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn delete_telegram_clears_handle_and_sets_never(pool: PgPool) {
+    async fn delete_telegram_clears_handle(pool: PgPool) {
         let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
             .await
             .unwrap();
@@ -542,7 +526,6 @@ mod tests {
             &pool,
             uid,
             crate::notification::db::PreferenceUpdate {
-                telegram_enabled: Some(true),
                 telegram_handle: Some("myhandle".into()),
                 ..Default::default()
             },
@@ -569,7 +552,6 @@ mod tests {
         assert_eq!(resp.status(), 200);
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["telegramEnabled"], false);
         assert_eq!(json["telegramHandle"], serde_json::Value::Null);
         assert_eq!(json["telegramVerified"], false);
 
@@ -585,7 +567,6 @@ mod tests {
             .unwrap();
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["telegramEnabled"], false);
         assert_eq!(json["telegramHandle"], serde_json::Value::Null);
     }
 
@@ -596,10 +577,7 @@ mod tests {
         crate::notification::db::upsert_preferences(
             pool,
             uid,
-            crate::notification::db::PreferenceUpdate {
-                email_enabled: Some(true),
-                ..Default::default()
-            },
+            crate::notification::db::PreferenceUpdate::default(),
         )
         .await
         .unwrap();

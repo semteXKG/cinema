@@ -83,11 +83,8 @@ mod tests {
             &pool,
             uid,
             crate::notification::db::PreferenceUpdate {
-                email_enabled: Some(false),
-                telegram_enabled: Some(true),
                 telegram_handle: Some("myhandle".into()),
-                digest_anchor: None,
-                digest_hour: None,
+                ..Default::default()
             },
         )
         .await

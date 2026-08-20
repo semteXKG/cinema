@@ -327,21 +327,18 @@ mod tests {
     async fn prefs_for(
         pool: &PgPool,
         uid: i64,
-        email_enabled: bool,
-        telegram_enabled: bool,
+        _email_enabled: bool,
+        _telegram_enabled: bool,
         handle: Option<&str>,
-        digest_anchor: Option<DateTime<Utc>>,
-        digest_hour: Option<i32>,
+        _digest_anchor: Option<DateTime<Utc>>,
+        _digest_hour: Option<i32>,
     ) {
         upsert_preferences(
             pool,
             uid,
             PreferenceUpdate {
-                email_enabled: Some(email_enabled),
-                telegram_enabled: Some(telegram_enabled),
                 telegram_handle: handle.map(|s| s.to_string()),
-                digest_anchor,
-                digest_hour,
+                ..Default::default()
             },
         )
         .await
@@ -364,15 +361,13 @@ mod tests {
 
     fn user_rules(
         uid: i64,
-        email: bool,
-        tg: bool,
+        _email: bool,
+        _tg: bool,
         chat: Option<&str>,
         rules: Vec<crate::notification::rules::Rule>,
     ) -> crate::notification::db::UserRules {
         crate::notification::db::UserRules {
             user_id: uid,
-            email_enabled: email,
-            telegram_enabled: tg,
             telegram_chat_id: chat.map(|s| s.to_string()),
             digest_anchor: at(16, 9),
             digest_hour: 9,
@@ -674,8 +669,6 @@ mod tests {
         let m = matchable(sid, 1, &["OV"], "F1");
         let users = vec![UserRules {
             user_id: uid,
-            email_enabled: false,
-            telegram_enabled: true,
             telegram_chat_id: Some("12345".into()),
             digest_anchor: at(16, 9),
             digest_hour: 9,
@@ -703,8 +696,6 @@ mod tests {
         let m = matchable(sid, 1, &["OV"], "F1");
         let users = vec![UserRules {
             user_id: uid,
-            email_enabled: false,
-            telegram_enabled: true,
             telegram_chat_id: None,
             digest_anchor: at(16, 9),
             digest_hour: 9,
@@ -729,8 +720,6 @@ mod tests {
         let m = matchable(sid, 1, &["OV"], "F1");
         let users = vec![UserRules {
             user_id: uid,
-            email_enabled: true,
-            telegram_enabled: true,
             telegram_chat_id: Some("999".into()),
             digest_anchor: at(16, 9),
             digest_hour: 9,

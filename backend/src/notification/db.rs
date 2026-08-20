@@ -6,8 +6,6 @@ use crate::notification::rules::{MatchableShowing, Rule};
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NotificationPreferences {
     pub user_id: i64,
-    pub email_enabled: bool,
-    pub telegram_enabled: bool,
     pub telegram_handle: Option<String>,
     pub telegram_chat_id: Option<String>,
     pub digest_anchor: DateTime<Utc>,
@@ -18,8 +16,6 @@ pub struct NotificationPreferences {
 
 #[derive(Debug, Default)]
 pub struct PreferenceUpdate {
-    pub email_enabled: Option<bool>,
-    pub telegram_enabled: Option<bool>,
     pub telegram_handle: Option<String>,
     pub digest_anchor: Option<DateTime<Utc>>,
     pub digest_hour: Option<i32>,
@@ -111,10 +107,6 @@ pub async fn replace_rules(
 #[derive(Debug, Clone)]
 pub struct UserRules {
     pub user_id: i64,
-    #[allow(dead_code)]
-    pub email_enabled: bool,
-    #[allow(dead_code)]
-    pub telegram_enabled: bool,
     pub telegram_chat_id: Option<String>,
     #[allow(dead_code)]
     pub digest_anchor: DateTime<Utc>,
@@ -127,8 +119,6 @@ impl From<NotificationPreferences> for UserRules {
     fn from(p: NotificationPreferences) -> Self {
         UserRules {
             user_id: p.user_id,
-            email_enabled: p.email_enabled,
-            telegram_enabled: p.telegram_enabled,
             telegram_chat_id: p.telegram_chat_id,
             digest_anchor: p.digest_anchor,
             digest_hour: p.digest_hour,
@@ -139,11 +129,12 @@ impl From<NotificationPreferences> for UserRules {
 
 pub async fn list_active_users_with_rules(pool: &PgPool) -> sqlx::Result<Vec<UserRules>> {
     let prefs: Vec<NotificationPreferences> = sqlx::query_as(
-        "SELECT user_id, email_enabled, telegram_enabled, telegram_handle,
-                telegram_chat_id, digest_anchor, digest_hour, updated_at
-         FROM notification_preferences
-         WHERE email_enabled
-            OR (telegram_enabled AND telegram_chat_id IS NOT NULL)
+        "SELECT user_id, telegram_handle, telegram_chat_id, digest_anchor, digest_hour, updated_at
+         FROM notification_preferences p
+         WHERE EXISTS (
+           SELECT 1 FROM notification_rule r
+           WHERE r.user_id = p.user_id AND r.frequency <> 'never'
+         )
          ORDER BY user_id",
     )
     .fetch_all(pool)
@@ -160,8 +151,6 @@ pub async fn list_active_users_with_rules(pool: &PgPool) -> sqlx::Result<Vec<Use
         .await?;
         out.push(UserRules {
             user_id: p.user_id,
-            email_enabled: p.email_enabled,
-            telegram_enabled: p.telegram_enabled,
             telegram_chat_id: p.telegram_chat_id,
             digest_anchor: p.digest_anchor,
             digest_hour: p.digest_hour,
@@ -221,8 +210,7 @@ pub async fn get_preferences(pool: &PgPool, user_id: i64) -> sqlx::Result<Notifi
         return Err(sqlx::Error::RowNotFound);
     };
     let row = sqlx::query_as::<_, NotificationPreferences>(
-        "SELECT user_id, email_enabled, telegram_enabled, telegram_handle,
-                telegram_chat_id, digest_anchor, digest_hour, updated_at
+        "SELECT user_id, telegram_handle, telegram_chat_id, digest_anchor, digest_hour, updated_at
          FROM notification_preferences WHERE user_id = $1",
     )
     .bind(user_id)
@@ -232,8 +220,6 @@ pub async fn get_preferences(pool: &PgPool, user_id: i64) -> sqlx::Result<Notifi
         Some(prefs) => prefs,
         None => NotificationPreferences {
             user_id,
-            email_enabled: false,
-            telegram_enabled: false,
             telegram_handle: None,
             telegram_chat_id: None,
             digest_anchor: created_at,
@@ -260,29 +246,21 @@ pub async fn upsert_preferences(
     } else {
         existing.telegram_chat_id.clone()
     };
-    let email_enabled = dto.email_enabled.unwrap_or(existing.email_enabled);
-    let telegram_enabled = dto.telegram_enabled.unwrap_or(existing.telegram_enabled);
     let digest_anchor = dto.digest_anchor.unwrap_or(existing.digest_anchor);
     let digest_hour = dto.digest_hour.unwrap_or(existing.digest_hour);
     sqlx::query_as::<_, NotificationPreferences>(
         "INSERT INTO notification_preferences
-           (user_id, email_enabled, telegram_enabled, telegram_handle,
-            telegram_chat_id, digest_anchor, digest_hour, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+           (user_id, telegram_handle, telegram_chat_id, digest_anchor, digest_hour, updated_at)
+         VALUES ($1, $2, $3, $4, $5, now())
          ON CONFLICT (user_id) DO UPDATE SET
-           email_enabled    = EXCLUDED.email_enabled,
-           telegram_enabled = EXCLUDED.telegram_enabled,
            telegram_handle  = EXCLUDED.telegram_handle,
            telegram_chat_id  = EXCLUDED.telegram_chat_id,
            digest_anchor    = EXCLUDED.digest_anchor,
            digest_hour      = EXCLUDED.digest_hour,
            updated_at       = now()
-         RETURNING user_id, email_enabled, telegram_enabled, telegram_handle,
-                   telegram_chat_id, digest_anchor, digest_hour, updated_at",
+         RETURNING user_id, telegram_handle, telegram_chat_id, digest_anchor, digest_hour, updated_at",
     )
     .bind(user_id)
-    .bind(email_enabled)
-    .bind(telegram_enabled)
     .bind(new_handle)
     .bind(chat_id)
     .bind(digest_anchor)
@@ -429,24 +407,13 @@ mod tests {
     use super::*;
     use chrono::Duration;
 
-    async fn prefs_for(
-        pool: &PgPool,
-        uid: i64,
-        email_enabled: bool,
-        telegram_enabled: bool,
-        handle: Option<&str>,
-        digest_anchor: Option<DateTime<Utc>>,
-        digest_hour: Option<i32>,
-    ) {
+    async fn prefs_for(pool: &PgPool, uid: i64, handle: Option<&str>) {
         upsert_preferences(
             pool,
             uid,
             PreferenceUpdate {
-                email_enabled: Some(email_enabled),
-                telegram_enabled: Some(telegram_enabled),
                 telegram_handle: handle.map(|s| s.to_string()),
-                digest_anchor,
-                digest_hour,
+                ..Default::default()
             },
         )
         .await
@@ -489,8 +456,6 @@ mod tests {
     async fn preferences_defaults_and_upsert(pool: PgPool) {
         let uid = make_user(&pool, "a@b.com").await;
         let prefs = get_preferences(&pool, uid).await.unwrap();
-        assert!(!prefs.email_enabled);
-        assert!(!prefs.telegram_enabled);
         assert!(prefs.telegram_handle.is_none());
         assert_eq!(prefs.digest_hour, 9);
 
@@ -498,8 +463,6 @@ mod tests {
             &pool,
             uid,
             PreferenceUpdate {
-                email_enabled: Some(true),
-                telegram_enabled: Some(false),
                 telegram_handle: Some("@MyHandle".into()),
                 digest_anchor: None,
                 digest_hour: Some(10),
@@ -507,8 +470,6 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(updated.email_enabled);
-        assert!(!updated.telegram_enabled);
         assert_eq!(updated.telegram_handle.as_deref(), Some("myhandle"));
     }
 
@@ -523,7 +484,6 @@ mod tests {
                 .unwrap();
         let prefs = get_preferences(&pool, uid).await.unwrap();
         assert_eq!(prefs.digest_anchor, created.0);
-        assert!(!prefs.email_enabled);
         assert_eq!(prefs.digest_hour, 9);
     }
 
@@ -534,11 +494,8 @@ mod tests {
             &pool,
             uid,
             PreferenceUpdate {
-                email_enabled: None,
-                telegram_enabled: Some(true),
                 telegram_handle: Some("myhandle".into()),
-                digest_anchor: None,
-                digest_hour: None,
+                ..Default::default()
             },
         )
         .await
@@ -754,8 +711,7 @@ mod tests {
     #[sqlx::test(migrations = "./migrations")]
     async fn get_due_batches_reads_batch_frequency(pool: PgPool) {
         let uid = make_user(&pool, "due@x.com").await;
-        let anchor = Utc::now() - Duration::days(10);
-        prefs_for(&pool, uid, true, false, None, Some(anchor), Some(9)).await;
+        prefs_for(&pool, uid, None).await;
         let imm = get_or_create_open_batch(&pool, uid, "email", "immediately")
             .await
             .unwrap();
@@ -948,9 +904,9 @@ mod tests {
         let active = make_user(&pool, "act@x.com").await;
         let inactive = make_user(&pool, "inact@x.com").await;
         let tg_unverified = make_user(&pool, "tg@x.com").await;
-        prefs_for(&pool, active, true, false, None, None, None).await;
-        prefs_for(&pool, inactive, false, false, None, None, None).await;
-        prefs_for(&pool, tg_unverified, false, true, Some("h"), None, None).await;
+        prefs_for(&pool, active, Some("h")).await;
+        prefs_for(&pool, inactive, None).await;
+        prefs_for(&pool, tg_unverified, Some("h2")).await;
         replace_rules(
             &pool,
             active,
@@ -964,14 +920,27 @@ mod tests {
         )
         .await
         .unwrap();
+        replace_rules(
+            &pool,
+            inactive,
+            &[RuleInput {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "never".into(),
+                channels: vec!["email".into()],
+            }],
+        )
+        .await
+        .unwrap();
 
         let users = list_active_users_with_rules(&pool).await.unwrap();
         let ids: Vec<i64> = users.iter().map(|u| u.user_id).collect();
         assert!(ids.contains(&active));
-        assert!(!ids.contains(&inactive));
+        assert!(!ids.contains(&inactive), "only-never-rule user is inactive");
         assert!(
             !ids.contains(&tg_unverified),
-            "telegram_enabled but unverified must not be active"
+            "user with no non-never rule must not be active"
         );
         let a = users.iter().find(|u| u.user_id == active).unwrap();
         assert_eq!(a.rules.len(), 1);
