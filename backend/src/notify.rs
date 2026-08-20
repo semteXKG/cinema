@@ -235,6 +235,7 @@ mod tests {
             version: version.into(),
             hall: hall.into(),
             url: url.into(),
+            features: vec![],
         }
     }
 

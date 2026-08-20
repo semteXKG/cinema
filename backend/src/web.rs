@@ -89,6 +89,7 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .merge(crate::auth::auth_router())
         .merge(crate::notification::preferences_router())
+        .merge(crate::notification::rules_router())
         .merge(crate::notification::telegram_webhook_router())
         .fallback_service(
             ServeDir::new(&state.static_dir)
@@ -542,6 +543,7 @@ mod tests {
             "Saal 6",
             "https://x",
             Utc::now(),
+            &[],
         )
         .await
         .unwrap()
@@ -577,6 +579,7 @@ mod tests {
             "Saal 6",
             "https://x",
             Utc::now(),
+            &[],
         )
         .await
         .unwrap()

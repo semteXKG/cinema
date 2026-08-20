@@ -1,27 +1,38 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
+use crate::notification::rules::{MatchableShowing, Rule};
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NotificationPreferences {
     pub user_id: i64,
-    pub email_frequency: String,
-    pub telegram_frequency: String,
+    pub email_enabled: bool,
+    pub telegram_enabled: bool,
     pub telegram_handle: Option<String>,
     pub telegram_chat_id: Option<String>,
     pub digest_anchor: DateTime<Utc>,
     pub digest_hour: i32,
-    // mapped DB column returned by SELECTs, not yet consumed by non-test code
     #[allow(dead_code)]
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Default)]
 pub struct PreferenceUpdate {
-    pub email_frequency: Option<String>,
-    pub telegram_frequency: Option<String>,
+    pub email_enabled: Option<bool>,
+    pub telegram_enabled: Option<bool>,
     pub telegram_handle: Option<String>,
     pub digest_anchor: Option<DateTime<Utc>>,
     pub digest_hour: Option<i32>,
+    #[deprecated(
+        since = "0.0.0",
+        note = "removed in favor of email_enabled/telegram_enabled"
+    )]
+    pub email_frequency: Option<String>,
+    #[deprecated(
+        since = "0.0.0",
+        note = "removed in favor of email_enabled/telegram_enabled"
+    )]
+    pub telegram_frequency: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -38,6 +49,169 @@ pub struct DueBatch {
     pub error_count: i32,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct NotificationRule {
+    pub id: i64,
+    pub user_id: i64,
+    pub position: i32,
+    pub cinema_id: Option<i64>,
+    pub features: Vec<String>,
+    pub title_substring: Option<String>,
+    pub frequency: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuleInput {
+    pub cinema_id: Option<i64>,
+    pub features: Vec<String>,
+    pub title_substring: Option<String>,
+    pub frequency: String,
+}
+
+pub async fn list_rules(pool: &PgPool, user_id: i64) -> sqlx::Result<Vec<NotificationRule>> {
+    sqlx::query_as(
+        "SELECT id, user_id, position, cinema_id, features, title_substring, frequency
+         FROM notification_rule WHERE user_id = $1 ORDER BY position",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn replace_rules(
+    pool: &PgPool,
+    user_id: i64,
+    input: &[RuleInput],
+) -> sqlx::Result<Vec<NotificationRule>> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM notification_rule WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    for (i, r) in input.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO notification_rule
+               (user_id, position, cinema_id, features, title_substring, frequency)
+             VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6)",
+        )
+        .bind(user_id)
+        .bind(i as i32)
+        .bind(r.cinema_id)
+        .bind(&r.features)
+        .bind(r.title_substring.as_deref())
+        .bind(&r.frequency)
+        .execute(&mut *tx)
+        .await?;
+    }
+    let rows = sqlx::query_as::<_, NotificationRule>(
+        "SELECT id, user_id, position, cinema_id, features, title_substring, frequency
+         FROM notification_rule WHERE user_id = $1 ORDER BY position",
+    )
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(rows)
+}
+
+#[derive(Debug, Clone)]
+pub struct UserRules {
+    pub user_id: i64,
+    pub email_enabled: bool,
+    pub telegram_enabled: bool,
+    pub telegram_chat_id: Option<String>,
+    pub digest_anchor: DateTime<Utc>,
+    pub digest_hour: i32,
+    pub rules: Vec<Rule>,
+}
+
+impl From<NotificationPreferences> for UserRules {
+    fn from(p: NotificationPreferences) -> Self {
+        UserRules {
+            user_id: p.user_id,
+            email_enabled: p.email_enabled,
+            telegram_enabled: p.telegram_enabled,
+            telegram_chat_id: p.telegram_chat_id,
+            digest_anchor: p.digest_anchor,
+            digest_hour: p.digest_hour,
+            rules: Vec::new(),
+        }
+    }
+}
+
+pub async fn list_active_users_with_rules(pool: &PgPool) -> sqlx::Result<Vec<UserRules>> {
+    let prefs: Vec<NotificationPreferences> = sqlx::query_as(
+        "SELECT user_id, email_enabled, telegram_enabled, telegram_handle,
+                telegram_chat_id, digest_anchor, digest_hour, updated_at
+         FROM notification_preferences
+         WHERE email_enabled
+            OR (telegram_enabled AND telegram_chat_id IS NOT NULL)
+         ORDER BY user_id",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut out = Vec::with_capacity(prefs.len());
+    for p in prefs {
+        let rules: Vec<NotificationRule> = sqlx::query_as(
+            "SELECT id, user_id, position, cinema_id, features, title_substring, frequency
+             FROM notification_rule WHERE user_id = $1 ORDER BY position",
+        )
+        .bind(p.user_id)
+        .fetch_all(pool)
+        .await?;
+        out.push(UserRules {
+            user_id: p.user_id,
+            email_enabled: p.email_enabled,
+            telegram_enabled: p.telegram_enabled,
+            telegram_chat_id: p.telegram_chat_id,
+            digest_anchor: p.digest_anchor,
+            digest_hour: p.digest_hour,
+            rules: rules
+                .into_iter()
+                .map(|r| Rule {
+                    cinema_id: r.cinema_id,
+                    features: r.features,
+                    title_substring: r.title_substring,
+                    frequency: r.frequency,
+                })
+                .collect(),
+        });
+    }
+    Ok(out)
+}
+
+pub async fn load_matchable_showings(
+    pool: &PgPool,
+    showing_ids: &[i64],
+) -> sqlx::Result<Vec<MatchableShowing>> {
+    let rows: Vec<(i64, i64, Vec<String>, String)> = sqlx::query_as(
+        "SELECT s.id, m.cinema_id, s.features, m.title
+         FROM showing s JOIN movie m ON m.id = s.movie_id
+         WHERE s.id = ANY($1)",
+    )
+    .bind(showing_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(showing_id, cinema_id, features, title)| MatchableShowing {
+                showing_id,
+                cinema_id,
+                features,
+                title,
+            },
+        )
+        .collect())
+}
+
+pub async fn list_cinemas(pool: &PgPool) -> sqlx::Result<Vec<(i64, String)>> {
+    sqlx::query_as("SELECT id, name FROM cinema ORDER BY id")
+        .fetch_all(pool)
+        .await
+}
+
 pub async fn get_preferences(pool: &PgPool, user_id: i64) -> sqlx::Result<NotificationPreferences> {
     let created_at: Option<(DateTime<Utc>,)> =
         sqlx::query_as("SELECT created_at FROM users WHERE id = $1")
@@ -48,7 +222,7 @@ pub async fn get_preferences(pool: &PgPool, user_id: i64) -> sqlx::Result<Notifi
         return Err(sqlx::Error::RowNotFound);
     };
     let row = sqlx::query_as::<_, NotificationPreferences>(
-        "SELECT user_id, email_frequency, telegram_frequency, telegram_handle,
+        "SELECT user_id, email_enabled, telegram_enabled, telegram_handle,
                 telegram_chat_id, digest_anchor, digest_hour, updated_at
          FROM notification_preferences WHERE user_id = $1",
     )
@@ -59,8 +233,8 @@ pub async fn get_preferences(pool: &PgPool, user_id: i64) -> sqlx::Result<Notifi
         Some(prefs) => prefs,
         None => NotificationPreferences {
             user_id,
-            email_frequency: "never".into(),
-            telegram_frequency: "never".into(),
+            email_enabled: false,
+            telegram_enabled: false,
             telegram_handle: None,
             telegram_chat_id: None,
             digest_anchor: created_at,
@@ -87,31 +261,29 @@ pub async fn upsert_preferences(
     } else {
         existing.telegram_chat_id.clone()
     };
-    let email_frequency = dto.email_frequency.unwrap_or(existing.email_frequency);
-    let telegram_frequency = dto
-        .telegram_frequency
-        .unwrap_or(existing.telegram_frequency);
+    let email_enabled = dto.email_enabled.unwrap_or(existing.email_enabled);
+    let telegram_enabled = dto.telegram_enabled.unwrap_or(existing.telegram_enabled);
     let digest_anchor = dto.digest_anchor.unwrap_or(existing.digest_anchor);
     let digest_hour = dto.digest_hour.unwrap_or(existing.digest_hour);
     sqlx::query_as::<_, NotificationPreferences>(
         "INSERT INTO notification_preferences
-           (user_id, email_frequency, telegram_frequency, telegram_handle,
+           (user_id, email_enabled, telegram_enabled, telegram_handle,
             telegram_chat_id, digest_anchor, digest_hour, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, now())
          ON CONFLICT (user_id) DO UPDATE SET
-           email_frequency    = EXCLUDED.email_frequency,
-           telegram_frequency = EXCLUDED.telegram_frequency,
-           telegram_handle    = EXCLUDED.telegram_handle,
-           telegram_chat_id   = EXCLUDED.telegram_chat_id,
-           digest_anchor      = EXCLUDED.digest_anchor,
-           digest_hour        = EXCLUDED.digest_hour,
-           updated_at         = now()
-         RETURNING user_id, email_frequency, telegram_frequency, telegram_handle,
+           email_enabled    = EXCLUDED.email_enabled,
+           telegram_enabled = EXCLUDED.telegram_enabled,
+           telegram_handle  = EXCLUDED.telegram_handle,
+           telegram_chat_id  = EXCLUDED.telegram_chat_id,
+           digest_anchor    = EXCLUDED.digest_anchor,
+           digest_hour      = EXCLUDED.digest_hour,
+           updated_at       = now()
+         RETURNING user_id, email_enabled, telegram_enabled, telegram_handle,
                    telegram_chat_id, digest_anchor, digest_hour, updated_at",
     )
     .bind(user_id)
-    .bind(email_frequency)
-    .bind(telegram_frequency)
+    .bind(email_enabled)
+    .bind(telegram_enabled)
     .bind(new_handle)
     .bind(chat_id)
     .bind(digest_anchor)
@@ -120,32 +292,21 @@ pub async fn upsert_preferences(
     .await
 }
 
-pub async fn list_active_preferences(pool: &PgPool) -> sqlx::Result<Vec<NotificationPreferences>> {
-    sqlx::query_as(
-        "SELECT user_id, email_frequency, telegram_frequency, telegram_handle,
-                telegram_chat_id, digest_anchor, digest_hour, updated_at
-         FROM notification_preferences
-         WHERE email_frequency != 'never'
-            OR (telegram_frequency != 'never' AND telegram_chat_id IS NOT NULL)
-         ORDER BY user_id",
-    )
-    .fetch_all(pool)
-    .await
-}
-
 pub async fn get_or_create_open_batch(
     pool: &PgPool,
     user_id: i64,
     layer: &str,
+    frequency: &str,
 ) -> sqlx::Result<i64> {
     let row: (i64,) = sqlx::query_as(
-        "INSERT INTO notification_batch (user_id, layer) VALUES ($1, $2)
-         ON CONFLICT (user_id, layer) WHERE status = 'pending'
+        "INSERT INTO notification_batch (user_id, layer, frequency) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, layer, frequency) WHERE status = 'pending'
          DO UPDATE SET updated_at = now()
          RETURNING id",
     )
     .bind(user_id)
     .bind(layer)
+    .bind(frequency)
     .fetch_one(pool)
     .await?;
     Ok(row.0)
@@ -169,14 +330,10 @@ pub async fn append_showing_to_batch(
 
 pub async fn get_due_batches(pool: &PgPool, now: DateTime<Utc>) -> sqlx::Result<Vec<DueBatch>> {
     sqlx::query_as(
-        "SELECT b.id AS batch_id, b.user_id, b.layer,
-                COALESCE(CASE WHEN b.layer = 'email'
-                              THEN p.email_frequency ELSE p.telegram_frequency END,
-                         'never') AS frequency,
+        "SELECT b.id AS batch_id, b.user_id, b.layer, b.frequency AS frequency,
                 COALESCE(p.digest_anchor, u.created_at) AS digest_anchor,
                 COALESCE(p.digest_hour, 9) AS digest_hour,
-                b.created_at,
-                b.error_count
+                b.created_at, b.error_count
          FROM notification_batch b
          JOIN users u ON u.id = b.user_id
          LEFT JOIN notification_preferences p ON p.user_id = b.user_id
@@ -240,12 +397,18 @@ pub async fn gc_failed_batches(
     .rows_affected())
 }
 
-pub async fn create_empty_batch(pool: &PgPool, user_id: i64, layer: &str) -> sqlx::Result<i64> {
+pub async fn create_empty_batch(
+    pool: &PgPool,
+    user_id: i64,
+    layer: &str,
+    frequency: &str,
+) -> sqlx::Result<i64> {
     let row: (i64,) = sqlx::query_as(
-        "INSERT INTO notification_batch (user_id, layer) VALUES ($1, $2) RETURNING id",
+        "INSERT INTO notification_batch (user_id, layer, frequency) VALUES ($1, $2, $3) RETURNING id",
     )
     .bind(user_id)
     .bind(layer)
+    .bind(frequency)
     .fetch_one(pool)
     .await?;
     Ok(row.0)
@@ -267,6 +430,31 @@ mod tests {
     use super::*;
     use chrono::Duration;
 
+    async fn prefs_for(
+        pool: &PgPool,
+        uid: i64,
+        email_enabled: bool,
+        telegram_enabled: bool,
+        handle: Option<&str>,
+        digest_anchor: Option<DateTime<Utc>>,
+        digest_hour: Option<i32>,
+    ) {
+        upsert_preferences(
+            pool,
+            uid,
+            PreferenceUpdate {
+                email_enabled: Some(email_enabled),
+                telegram_enabled: Some(telegram_enabled),
+                telegram_handle: handle.map(|s| s.to_string()),
+                digest_anchor,
+                digest_hour,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+
     async fn make_user(pool: &PgPool, email: &str) -> i64 {
         crate::db::find_or_create_user(pool, "email", email, email)
             .await
@@ -285,7 +473,8 @@ mod tests {
             "OV",
             "Saal 6",
             "https://x",
-            Utc::now()
+            Utc::now(),
+            &[],
         )
         .await
         .unwrap()
@@ -302,27 +491,27 @@ mod tests {
     async fn preferences_defaults_and_upsert(pool: PgPool) {
         let uid = make_user(&pool, "a@b.com").await;
         let prefs = get_preferences(&pool, uid).await.unwrap();
-        assert_eq!(prefs.email_frequency, "never");
-        assert_eq!(prefs.telegram_frequency, "never");
+        assert!(!prefs.email_enabled);
+        assert!(!prefs.telegram_enabled);
         assert!(prefs.telegram_handle.is_none());
-        assert!(prefs.telegram_chat_id.is_none());
         assert_eq!(prefs.digest_hour, 9);
 
         let updated = upsert_preferences(
             &pool,
             uid,
             PreferenceUpdate {
-                email_frequency: Some("immediately".into()),
-                telegram_frequency: Some("3".into()),
+                email_enabled: Some(true),
+                telegram_enabled: Some(false),
                 telegram_handle: Some("@MyHandle".into()),
                 digest_anchor: None,
                 digest_hour: Some(10),
+                ..Default::default()
             },
         )
         .await
         .unwrap();
-        assert_eq!(updated.email_frequency, "immediately");
-        assert_eq!(updated.telegram_frequency, "3");
+        assert!(updated.email_enabled);
+        assert!(!updated.telegram_enabled);
         assert_eq!(updated.telegram_handle.as_deref(), Some("myhandle"));
     }
 
@@ -337,7 +526,7 @@ mod tests {
                 .unwrap();
         let prefs = get_preferences(&pool, uid).await.unwrap();
         assert_eq!(prefs.digest_anchor, created.0);
-        assert_eq!(prefs.email_frequency, "never");
+        assert!(!prefs.email_enabled);
         assert_eq!(prefs.digest_hour, 9);
     }
 
@@ -348,11 +537,12 @@ mod tests {
             &pool,
             uid,
             PreferenceUpdate {
-                email_frequency: None,
-                telegram_frequency: Some("immediately".into()),
+                email_enabled: None,
+                telegram_enabled: Some(true),
                 telegram_handle: Some("myhandle".into()),
                 digest_anchor: None,
                 digest_hour: None,
+                ..Default::default()
             },
         )
         .await
@@ -426,74 +616,16 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn list_active_preferences_filters(pool: PgPool) {
-        let email_active = make_user(&pool, "e1@x.com").await;
-        let telegram_active = make_user(&pool, "e2@x.com").await;
-        let telegram_unverified = make_user(&pool, "e3@x.com").await;
-        let none_active = make_user(&pool, "e4@x.com").await;
-
-        upsert_preferences(
-            &pool,
-            email_active,
-            PreferenceUpdate {
-                email_frequency: Some("immediately".into()),
-                telegram_frequency: None,
-                telegram_handle: None,
-                digest_anchor: None,
-                digest_hour: None,
-            },
-        )
-        .await
-        .unwrap();
-        upsert_preferences(
-            &pool,
-            telegram_active,
-            PreferenceUpdate {
-                email_frequency: None,
-                telegram_frequency: Some("3".into()),
-                telegram_handle: Some("h2".into()),
-                digest_anchor: None,
-                digest_hour: None,
-            },
-        )
-        .await
-        .unwrap();
-        sqlx::query(
-            "UPDATE notification_preferences SET telegram_chat_id = '111' WHERE user_id = $1",
-        )
-        .bind(telegram_active)
-        .execute(&pool)
-        .await
-        .unwrap();
-        upsert_preferences(
-            &pool,
-            telegram_unverified,
-            PreferenceUpdate {
-                email_frequency: None,
-                telegram_frequency: Some("3".into()),
-                telegram_handle: Some("h3".into()),
-                digest_anchor: None,
-                digest_hour: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        let active = list_active_preferences(&pool).await.unwrap();
-        let ids: Vec<i64> = active.iter().map(|p| p.user_id).collect();
-        assert!(ids.contains(&email_active));
-        assert!(ids.contains(&telegram_active));
-        assert!(!ids.contains(&telegram_unverified));
-        assert!(!ids.contains(&none_active));
-    }
-
-    #[sqlx::test(migrations = "./migrations")]
     async fn get_or_create_open_batch_is_idempotent(pool: PgPool) {
         let uid = make_user(&pool, "b@x.com").await;
-        let id1 = get_or_create_open_batch(&pool, uid, "email").await.unwrap();
-        let id2 = get_or_create_open_batch(&pool, uid, "email").await.unwrap();
+        let id1 = get_or_create_open_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
+        let id2 = get_or_create_open_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
         assert_eq!(id1, id2);
-        let id3 = get_or_create_open_batch(&pool, uid, "telegram")
+        let id3 = get_or_create_open_batch(&pool, uid, "telegram", "immediately")
             .await
             .unwrap();
         assert_ne!(id1, id3);
@@ -502,7 +634,9 @@ mod tests {
     #[sqlx::test(migrations = "./migrations")]
     async fn append_showing_dedups(pool: PgPool) {
         let uid = make_user(&pool, "d@x.com").await;
-        let batch_id = get_or_create_open_batch(&pool, uid, "email").await.unwrap();
+        let batch_id = get_or_create_open_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
         let showing_id = make_showing(&pool).await;
         append_showing_to_batch(&pool, batch_id, showing_id)
             .await
@@ -522,7 +656,9 @@ mod tests {
     #[sqlx::test(migrations = "./migrations")]
     async fn mark_sending_and_sent(pool: PgPool) {
         let uid = make_user(&pool, "e@x.com").await;
-        let batch_id = create_empty_batch(&pool, uid, "email").await.unwrap();
+        let batch_id = create_empty_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
         mark_batch_sending(&pool, batch_id).await.unwrap();
         let status: (String,) =
             sqlx::query_as("SELECT status FROM notification_batch WHERE id = $1")
@@ -545,7 +681,9 @@ mod tests {
     #[sqlx::test(migrations = "./migrations")]
     async fn mark_failed_increments_error_count(pool: PgPool) {
         let uid = make_user(&pool, "f@x.com").await;
-        let batch_id = create_empty_batch(&pool, uid, "telegram").await.unwrap();
+        let batch_id = create_empty_batch(&pool, uid, "telegram", "immediately")
+            .await
+            .unwrap();
         mark_batch_failed(&pool, batch_id, "boom").await.unwrap();
         mark_batch_failed(&pool, batch_id, "boom again")
             .await
@@ -565,7 +703,9 @@ mod tests {
     #[sqlx::test(migrations = "./migrations")]
     async fn create_empty_and_delete_open_batch(pool: PgPool) {
         let uid = make_user(&pool, "g@x.com").await;
-        let batch_id = create_empty_batch(&pool, uid, "email").await.unwrap();
+        let batch_id = create_empty_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
         let showing_id = make_showing(&pool).await;
         append_showing_to_batch(&pool, batch_id, showing_id)
             .await
@@ -585,7 +725,9 @@ mod tests {
                 .unwrap();
         assert_eq!(links.0, 0);
 
-        let sent_id = create_empty_batch(&pool, uid, "telegram").await.unwrap();
+        let sent_id = create_empty_batch(&pool, uid, "telegram", "immediately")
+            .await
+            .unwrap();
         mark_batch_sent(&pool, sent_id).await.unwrap();
         delete_open_batch(&pool, uid, "telegram").await.unwrap();
         let exists: (i64,) =
@@ -598,51 +740,64 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn open_batches_are_per_frequency(pool: PgPool) {
+        let uid = make_user(&pool, "freq@x.com").await;
+        let a = get_or_create_open_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
+        let b = get_or_create_open_batch(&pool, uid, "email", "3")
+            .await
+            .unwrap();
+        let a2 = get_or_create_open_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
+        assert_ne!(a, b);
+        assert_eq!(a, a2, "idempotent per (user, layer, frequency)");
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn get_due_batches_reads_batch_frequency(pool: PgPool) {
+        let uid = make_user(&pool, "due@x.com").await;
+        let anchor = Utc::now() - Duration::days(10);
+        prefs_for(&pool, uid, true, false, None, Some(anchor), Some(9)).await;
+        let imm = get_or_create_open_batch(&pool, uid, "email", "immediately")
+            .await
+            .unwrap();
+        let three = get_or_create_open_batch(&pool, uid, "email", "3")
+            .await
+            .unwrap();
+        let due = get_due_batches(&pool, Utc::now()).await.unwrap();
+        let ids: Vec<i64> = due.iter().map(|d| d.batch_id).collect();
+        assert!(ids.contains(&imm), "immediately batch should be returned");
+        assert!(
+            ids.contains(&three),
+            "3-day batch should also be returned (filtered by batch_is_due, not here)"
+        );
+        let imm_row = due.iter().find(|d| d.batch_id == imm).unwrap();
+        assert_eq!(imm_row.frequency, "immediately");
+        let three_row = due.iter().find(|d| d.batch_id == three).unwrap();
+        assert_eq!(three_row.frequency, "3");
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn get_due_batches_returns_pending_and_retryable_failed(pool: PgPool) {
         let email_user = make_user(&pool, "i1@x.com").await;
         let telegram_user = make_user(&pool, "i2@x.com").await;
         let sent_user = make_user(&pool, "i3@x.com").await;
 
-        upsert_preferences(
-            &pool,
-            email_user,
-            PreferenceUpdate {
-                email_frequency: Some("immediately".into()),
-                telegram_frequency: None,
-                telegram_handle: None,
-                digest_anchor: None,
-                digest_hour: None,
-            },
-        )
-        .await
-        .unwrap();
-        upsert_preferences(
-            &pool,
-            telegram_user,
-            PreferenceUpdate {
-                email_frequency: None,
-                telegram_frequency: Some("3".into()),
-                telegram_handle: None,
-                digest_anchor: None,
-                digest_hour: Some(7),
-            },
-        )
-        .await
-        .unwrap();
-
-        let pending_email = get_or_create_open_batch(&pool, email_user, "email")
+        let pending_email = get_or_create_open_batch(&pool, email_user, "email", "immediately")
             .await
             .unwrap();
-        let pending_tg = get_or_create_open_batch(&pool, telegram_user, "telegram")
+        let pending_tg = get_or_create_open_batch(&pool, telegram_user, "telegram", "3")
             .await
             .unwrap();
 
-        let recent_failed = create_empty_batch(&pool, email_user, "telegram")
+        let recent_failed = create_empty_batch(&pool, email_user, "telegram", "immediately")
             .await
             .unwrap();
         mark_batch_failed(&pool, recent_failed, "x").await.unwrap();
 
-        let retry_failed = create_empty_batch(&pool, telegram_user, "email")
+        let retry_failed = create_empty_batch(&pool, telegram_user, "email", "3")
             .await
             .unwrap();
         mark_batch_failed(&pool, retry_failed, "y").await.unwrap();
@@ -654,7 +809,7 @@ mod tests {
         .await
         .unwrap();
 
-        let sent = create_empty_batch(&pool, sent_user, "telegram")
+        let sent = create_empty_batch(&pool, sent_user, "telegram", "immediately")
             .await
             .unwrap();
         mark_batch_sent(&pool, sent).await.unwrap();
@@ -667,32 +822,154 @@ mod tests {
         assert!(!ids.contains(&recent_failed));
         assert!(!ids.contains(&sent));
 
-        let email_batch = due.iter().find(|d| d.batch_id == pending_email).unwrap();
-        assert_eq!(email_batch.layer, "email");
-        assert_eq!(email_batch.frequency, "immediately");
-        let tg_batch = due.iter().find(|d| d.batch_id == pending_tg).unwrap();
-        assert_eq!(tg_batch.layer, "telegram");
-        assert_eq!(tg_batch.frequency, "3");
-        assert_eq!(tg_batch.digest_hour, 7);
-        let failed_batch = due.iter().find(|d| d.batch_id == retry_failed).unwrap();
-        assert_eq!(failed_batch.frequency, "never");
-        assert_eq!(failed_batch.error_count, 1);
+        assert_eq!(
+            due.iter()
+                .find(|d| d.batch_id == pending_email)
+                .unwrap()
+                .frequency,
+            "immediately"
+        );
+        assert_eq!(
+            due.iter()
+                .find(|d| d.batch_id == pending_tg)
+                .unwrap()
+                .frequency,
+            "3"
+        );
+        assert_eq!(
+            due.iter()
+                .find(|d| d.batch_id == retry_failed)
+                .unwrap()
+                .frequency,
+            "3"
+        );
+    }
+
+    async fn make_rule_user(pool: &PgPool) -> i64 {
+        crate::db::find_or_create_user(pool, "email", "rules@x.com", "rules@x.com")
+            .await
+            .unwrap()
+    }
+
+    fn input(
+        cinema_id: Option<i64>,
+        features: &[&str],
+        title: Option<&str>,
+        freq: &str,
+    ) -> RuleInput {
+        RuleInput {
+            cinema_id,
+            features: features.iter().map(|s| s.to_string()).collect(),
+            title_substring: title.map(|s| s.to_string()),
+            frequency: freq.to_string(),
+        }
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn get_due_batches_high_error_count_retryable_without_overflow(pool: PgPool) {
-        let uid = make_user(&pool, "j@x.com").await;
-        let row: (i64,) = sqlx::query_as(
-            "INSERT INTO notification_batch (user_id, layer, status, error_count, updated_at)
-             VALUES ($1, 'email', 'failed', 40, now() - interval '25 hours')
-             RETURNING id",
+    async fn replace_rules_inserts_in_order(pool: PgPool) {
+        let uid = make_rule_user(&pool).await;
+        let inserted = replace_rules(
+            &pool,
+            uid,
+            &[
+                input(Some(1), &["IMAX", "Atmos"], None, "immediately"),
+                input(None, &[], None, "3"),
+            ],
         )
-        .bind(uid)
-        .fetch_one(&pool)
         .await
         .unwrap();
-        let batch_id = row.0;
-        let due = get_due_batches(&pool, Utc::now()).await.unwrap();
-        assert!(due.iter().any(|d| d.batch_id == batch_id));
+        assert_eq!(inserted.len(), 2);
+        assert_eq!(inserted[0].position, 0);
+        assert_eq!(inserted[0].features, vec!["IMAX", "Atmos"]);
+        assert_eq!(inserted[1].position, 1);
+        assert_eq!(inserted[1].frequency, "3");
+        let listed = list_rules(&pool, uid).await.unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].id, inserted[0].id);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn replace_rules_is_replacement(pool: PgPool) {
+        let uid = make_rule_user(&pool).await;
+        replace_rules(&pool, uid, &[input(None, &[], None, "3")])
+            .await
+            .unwrap();
+        let replaced = replace_rules(
+            &pool,
+            uid,
+            &[input(Some(1), &["IMAX"], None, "immediately")],
+        )
+        .await
+        .unwrap();
+        assert_eq!(replaced.len(), 1);
+        assert_eq!(replaced[0].frequency, "immediately");
+        assert_eq!(list_rules(&pool, uid).await.unwrap().len(), 1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn list_cinemas_returns_known(pool: PgPool) {
+        let cinemas = list_cinemas(&pool).await.unwrap();
+        let names: Vec<String> = cinemas.iter().map(|(_, n)| n.clone()).collect();
+        assert!(names.contains(&"Cineplexx Linz".to_string()));
+        assert!(names.contains(&"Megaplex PlusCity".to_string()));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn list_active_users_with_rules_filters_inactive(pool: PgPool) {
+        let active = make_user(&pool, "act@x.com").await;
+        let inactive = make_user(&pool, "inact@x.com").await;
+        let tg_unverified = make_user(&pool, "tg@x.com").await;
+        prefs_for(&pool, active, true, false, None, None, None).await;
+        prefs_for(&pool, inactive, false, false, None, None, None).await;
+        prefs_for(&pool, tg_unverified, false, true, Some("h"), None, None).await;
+        replace_rules(
+            &pool,
+            active,
+            &[RuleInput {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "3".into(),
+            }],
+        )
+        .await
+        .unwrap();
+
+        let users = list_active_users_with_rules(&pool).await.unwrap();
+        let ids: Vec<i64> = users.iter().map(|u| u.user_id).collect();
+        assert!(ids.contains(&active));
+        assert!(!ids.contains(&inactive));
+        assert!(
+            !ids.contains(&tg_unverified),
+            "telegram_enabled but unverified must not be active"
+        );
+        let a = users.iter().find(|u| u.user_id == active).unwrap();
+        assert_eq!(a.rules.len(), 1);
+        assert_eq!(a.rules[0].frequency, "3");
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn load_matchable_showings_joins_cinema_features(pool: PgPool) {
+        let mid = crate::db::upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
+            .await
+            .unwrap();
+        let sid = crate::db::insert_showing(
+            &pool,
+            mid,
+            Utc::now() + Duration::days(1),
+            "OV",
+            "Saal 6",
+            "https://x",
+            Utc::now(),
+            &["OV".into(), "2D".into()],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let ms = load_matchable_showings(&pool, &[sid]).await.unwrap();
+        assert_eq!(ms.len(), 1);
+        assert_eq!(ms[0].showing_id, sid);
+        assert_eq!(ms[0].title, "F1");
+        assert!(ms[0].features.contains(&"OV".to_string()));
     }
 }

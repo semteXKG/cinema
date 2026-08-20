@@ -213,7 +213,14 @@ pub async fn run_check(ctx: &CheckCtx<'_>, now: DateTime<Utc>) -> anyhow::Result
         )
         .await?;
         if let Some(showing_id) = db::insert_showing(
-            ctx.pool, movie_id, s.start, &s.version, &s.hall, &s.url, now,
+            ctx.pool,
+            movie_id,
+            s.start,
+            &s.version,
+            &s.hall,
+            &s.url,
+            now,
+            &s.features,
         )
         .await?
         {
@@ -249,9 +256,12 @@ pub async fn run_check(ctx: &CheckCtx<'_>, now: DateTime<Utc>) -> anyhow::Result
     // 6. Notification batches: queue new showings for subscribed users, then
     // send whatever is due (public-channel behavior above is untouched).
     if !new_showing_ids.is_empty() {
-        let prefs = crate::notification::db::list_active_preferences(ctx.pool).await?;
-        for (showing_id, _) in &new_showing_ids {
-            crate::notification::batch::append_showing_for_users(ctx.pool, *showing_id, &prefs)
+        let users = crate::notification::db::list_active_users_with_rules(ctx.pool).await?;
+        let showing_ids: Vec<i64> = new_showing_ids.iter().map(|(id, _)| *id).collect();
+        let matchables =
+            crate::notification::db::load_matchable_showings(ctx.pool, &showing_ids).await?;
+        for m in &matchables {
+            crate::notification::batch::route_showing_for_users(ctx.pool, m.showing_id, m, &users)
                 .await?;
         }
     }
@@ -297,6 +307,7 @@ mod tests {
             version: "OV".into(),
             hall: "Saal 6".into(),
             url: "https://x".into(),
+            features: vec![],
         }
     }
 
@@ -589,6 +600,58 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn new_showing_routes_by_user_rules(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = config(dir.path(), false);
+        let http = http();
+        let fetcher = FakeFetcher {
+            result: Ok((vec![make_showing(20)], HashMap::new())),
+        };
+        let uid = crate::db::find_or_create_user(&pool, "email", "a@b.com", "a@b.com")
+            .await
+            .unwrap();
+        crate::notification::db::upsert_preferences(
+            &pool,
+            uid,
+            crate::notification::db::PreferenceUpdate {
+                email_enabled: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        crate::notification::db::replace_rules(
+            &pool,
+            uid,
+            &[crate::notification::db::RuleInput {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "immediately".into(),
+            }],
+        )
+        .await
+        .unwrap();
+        let email = RecordingEmail::default();
+        let c = CheckCtx {
+            pool: &pool,
+            http: &http,
+            config: &cfg,
+            notifier: None,
+            fetchers: vec![("cineplexx", &fetcher)],
+            email: Some(&email),
+            telegram: None,
+        };
+        let r = run_check(&c, now()).await.unwrap();
+        assert_eq!((r.new_showings, r.total_showings), (1, 1));
+        assert_eq!(
+            email.sent.lock().unwrap().len(),
+            1,
+            "immediate catch-all rule flushes immediately"
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn new_showing_creates_batch_for_immediate_user(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let cfg = config(dir.path(), false);
@@ -603,9 +666,21 @@ mod tests {
             &pool,
             uid,
             crate::notification::db::PreferenceUpdate {
-                email_frequency: Some("immediately".into()),
+                email_enabled: Some(true),
                 ..Default::default()
             },
+        )
+        .await
+        .unwrap();
+        crate::notification::db::replace_rules(
+            &pool,
+            uid,
+            &[crate::notification::db::RuleInput {
+                cinema_id: None,
+                features: vec![],
+                title_substring: None,
+                frequency: "immediately".into(),
+            }],
         )
         .await
         .unwrap();

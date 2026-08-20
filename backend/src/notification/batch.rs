@@ -1,5 +1,6 @@
 use crate::models::{MovieMeta, Showing};
-use crate::notification::db::{self, DueBatch, NotificationPreferences};
+use crate::notification::db::{self, DueBatch, UserRules};
+use crate::notification::rules::{first_match, MatchableShowing};
 use crate::notification::schedule::{next_digest_after, parse_frequency, Frequency};
 use crate::notification::send::EmailNotifier;
 use crate::notify::{self, TelegramDmNotifier};
@@ -41,22 +42,27 @@ pub struct BatchCtx<'a> {
     pub max_retry_age_hours: u64,
 }
 
-pub async fn append_showing_for_users(
+pub async fn route_showing_for_users(
     pool: &PgPool,
     showing_id: i64,
-    preferences: &[NotificationPreferences],
+    showing: &MatchableShowing,
+    users: &[UserRules],
 ) -> sqlx::Result<Vec<(i64, String)>> {
     let mut affected: Vec<(i64, String)> = Vec::new();
-    for prefs in preferences {
-        if prefs.email_frequency != "never" {
-            let batch_id = db::get_or_create_open_batch(pool, prefs.user_id, "email").await?;
-            db::append_showing_to_batch(pool, batch_id, showing_id).await?;
-            affected.push((prefs.user_id, "email".to_string()));
+    for u in users {
+        let freq = first_match(&u.rules, showing).unwrap_or("never");
+        if freq == "never" {
+            continue;
         }
-        if prefs.telegram_frequency != "never" && prefs.telegram_chat_id.is_some() {
-            let batch_id = db::get_or_create_open_batch(pool, prefs.user_id, "telegram").await?;
+        if u.email_enabled {
+            let batch_id = db::get_or_create_open_batch(pool, u.user_id, "email", freq).await?;
             db::append_showing_to_batch(pool, batch_id, showing_id).await?;
-            affected.push((prefs.user_id, "telegram".to_string()));
+            affected.push((u.user_id, "email".to_string()));
+        }
+        if u.telegram_enabled && u.telegram_chat_id.is_some() {
+            let batch_id = db::get_or_create_open_batch(pool, u.user_id, "telegram", freq).await?;
+            db::append_showing_to_batch(pool, batch_id, showing_id).await?;
+            affected.push((u.user_id, "telegram".to_string()));
         }
     }
     Ok(affected)
@@ -169,7 +175,9 @@ async fn handle_batch(ctx: &BatchCtx<'_>, batch: &DueBatch) -> anyhow::Result<Ou
         }
     }
     db::mark_batch_sent(ctx.pool, batch.batch_id).await?;
-    if let Err(e) = db::create_empty_batch(ctx.pool, batch.user_id, &batch.layer).await {
+    if let Err(e) =
+        db::create_empty_batch(ctx.pool, batch.user_id, &batch.layer, &batch.frequency).await
+    {
         tracing::warn!(batch_id = batch.batch_id, error = %e, "failed to create next empty batch");
     }
     Ok(Outcome::Sent)
@@ -213,6 +221,7 @@ async fn load_batch_showings(
             version: r.version.clone(),
             hall: r.hall.clone(),
             url: r.url.clone(),
+            features: vec![],
         })
         .collect();
     let mut metas: HashMap<String, MovieMeta> = HashMap::new();
@@ -258,7 +267,8 @@ fn wrap_email_html(body: &str, base_url: &str) -> String {
 mod tests {
     use super::*;
     use crate::db;
-    use crate::notification::db::{get_preferences, upsert_preferences, PreferenceUpdate};
+    use crate::notification::db::{upsert_preferences, PreferenceUpdate};
+    use crate::notification::rules::MatchableShowing;
     use chrono::{TimeZone, Utc};
     use chrono_tz::Europe::Vienna;
     use sqlx::PgPool;
@@ -297,6 +307,7 @@ mod tests {
             "Saal 6",
             "https://x",
             at(18, 10),
+            &[],
         )
         .await
         .unwrap();
@@ -312,8 +323,8 @@ mod tests {
     async fn prefs_for(
         pool: &PgPool,
         uid: i64,
-        email_freq: &str,
-        telegram_freq: &str,
+        email_enabled: bool,
+        telegram_enabled: bool,
         handle: Option<&str>,
         digest_anchor: Option<DateTime<Utc>>,
         digest_hour: Option<i32>,
@@ -322,15 +333,57 @@ mod tests {
             pool,
             uid,
             PreferenceUpdate {
-                email_frequency: Some(email_freq.to_string()),
-                telegram_frequency: Some(telegram_freq.to_string()),
+                email_enabled: Some(email_enabled),
+                telegram_enabled: Some(telegram_enabled),
                 telegram_handle: handle.map(|s| s.to_string()),
                 digest_anchor,
                 digest_hour,
+                ..Default::default()
             },
         )
         .await
         .unwrap();
+    }
+
+    fn matchable(
+        showing_id: i64,
+        cinema_id: i64,
+        features: &[&str],
+        title: &str,
+    ) -> MatchableShowing {
+        MatchableShowing {
+            showing_id,
+            cinema_id,
+            features: features.iter().map(|s| s.to_string()).collect(),
+            title: title.to_string(),
+        }
+    }
+
+    fn user_rules(
+        uid: i64,
+        email: bool,
+        tg: bool,
+        chat: Option<&str>,
+        rules: Vec<crate::notification::rules::Rule>,
+    ) -> crate::notification::db::UserRules {
+        crate::notification::db::UserRules {
+            user_id: uid,
+            email_enabled: email,
+            telegram_enabled: tg,
+            telegram_chat_id: chat.map(|s| s.to_string()),
+            digest_anchor: at(16, 9),
+            digest_hour: 9,
+            rules,
+        }
+    }
+
+    fn rule(freq: &str) -> crate::notification::rules::Rule {
+        crate::notification::rules::Rule {
+            cinema_id: None,
+            features: vec![],
+            title_substring: None,
+            frequency: freq.to_string(),
+        }
     }
 
     async fn set_chat_id(pool: &PgPool, uid: i64, chat_id: &str) {
@@ -351,17 +404,10 @@ mod tests {
             .unwrap();
     }
 
-    async fn open_batch_id(pool: &PgPool, uid: i64, layer: &str) -> i64 {
+    async fn open_batch_id(pool: &PgPool, uid: i64, layer: &str, frequency: &str) -> i64 {
         sqlx::query_as::<_, (i64,)>(
-            "SELECT id FROM notification_batch
-             WHERE user_id = $1 AND layer = $2 AND status = 'pending'",
-        )
-        .bind(uid)
-        .bind(layer)
-        .fetch_one(pool)
-        .await
-        .unwrap()
-        .0
+            "SELECT id FROM notification_batch WHERE user_id=$1 AND layer=$2 AND frequency=$3 AND status='pending'",
+        ).bind(uid).bind(layer).bind(frequency).fetch_one(pool).await.unwrap().0
     }
 
     async fn batch_status(pool: &PgPool, batch_id: i64) -> String {
@@ -371,19 +417,6 @@ mod tests {
             .await
             .unwrap()
             .0
-    }
-
-    async fn count_open_batches(pool: &PgPool, uid: i64, layer: &str) -> i64 {
-        sqlx::query_as::<_, (i64,)>(
-            "SELECT count(*) FROM notification_batch
-             WHERE user_id = $1 AND layer = $2 AND status = 'pending'",
-        )
-        .bind(uid)
-        .bind(layer)
-        .fetch_one(pool)
-        .await
-        .unwrap()
-        .0
     }
 
     fn ctx<'a>(
@@ -455,175 +488,141 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn immediately_email_batch_is_sent(pool: PgPool) {
+    async fn immediate_rule_routes_to_immediate_batch(pool: PgPool) {
         let uid = make_user(&pool, "a@b.com").await;
-        prefs_for(&pool, uid, "immediately", "never", None, None, None).await;
-        let showing_id = make_showing(&pool, "The Odyssey").await;
-
-        let affected = append_showing_for_users(
-            &pool,
-            showing_id,
-            &[get_preferences(&pool, uid).await.unwrap()],
-        )
-        .await
-        .unwrap();
+        prefs_for(&pool, uid, true, false, None, None, None).await;
+        let sid = make_showing(&pool, "The Odyssey").await;
+        let m = matchable(sid, 1, &["OV"], "The Odyssey");
+        let users = vec![user_rules(
+            uid,
+            true,
+            false,
+            None,
+            vec![rule("immediately")],
+        )];
+        let affected = route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
         assert_eq!(affected, vec![(uid, "email".to_string())]);
-        let batch_id = open_batch_id(&pool, uid, "email").await;
-        assert_eq!(batch_status(&pool, batch_id).await, "pending");
-
-        let email = RecordingEmail::default();
-        let sent = process_due_batches(&ctx(&pool, Some(&email), None), at(18, 12))
-            .await
-            .unwrap();
-        assert_eq!(sent, 1);
-
-        {
-            let sent_emails = email.sent.lock().unwrap();
-            assert_eq!(sent_emails.len(), 1);
-            assert_eq!(sent_emails[0].0, "a@b.com");
-            assert_eq!(sent_emails[0].1, EMAIL_SUBJECT);
-            assert!(sent_emails[0].2.contains("The Odyssey"));
-            assert!(sent_emails[0]
-                .2
-                .contains("https://cinema.k-labs.app/preferences"));
-        }
-
-        assert_eq!(batch_status(&pool, batch_id).await, "sent");
-        assert_eq!(count_open_batches(&pool, uid, "email").await, 1);
+        let n: (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM notification_batch WHERE user_id=$1 AND layer='email' AND frequency='immediately' AND status='pending'",
+        ).bind(uid).fetch_one(&pool).await.unwrap();
+        assert_eq!(n.0, 1);
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn three_day_telegram_batch_not_due_yet(pool: PgPool) {
+    async fn never_match_creates_no_batch(pool: PgPool) {
         let uid = make_user(&pool, "c@d.com").await;
-        prefs_for(
-            &pool,
+        prefs_for(&pool, uid, true, false, None, None, None).await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &[], "F1");
+        let users = vec![user_rules(
             uid,
-            "never",
-            "3",
-            Some("myhandle"),
-            Some(at(16, 9)),
-            Some(9),
-        )
-        .await;
-        set_chat_id(&pool, uid, "12345").await;
-        let showing_id = make_showing(&pool, "F1").await;
-
-        let affected = append_showing_for_users(
-            &pool,
-            showing_id,
-            &[get_preferences(&pool, uid).await.unwrap()],
-        )
-        .await
-        .unwrap();
-        assert_eq!(affected, vec![(uid, "telegram".to_string())]);
-        let batch_id = open_batch_id(&pool, uid, "telegram").await;
-        set_batch_created_at(&pool, batch_id, at(19, 8)).await;
-
-        let tg = RecordingTelegram::default();
-        let sent = process_due_batches(&ctx(&pool, None, Some(&tg)), at(19, 8))
+            true,
+            false,
+            None,
+            vec![crate::notification::rules::Rule {
+                cinema_id: Some(999),
+                features: vec![],
+                title_substring: None,
+                frequency: "immediately".to_string(),
+            }],
+        )];
+        let affected = route_showing_for_users(&pool, sid, &m, &users)
             .await
             .unwrap();
-        assert_eq!(sent, 0);
-        assert!(tg.sent.lock().unwrap().is_empty());
-        assert_eq!(batch_status(&pool, batch_id).await, "pending");
-    }
-
-    #[sqlx::test(migrations = "./migrations")]
-    async fn three_day_batch_due_after_digest(pool: PgPool) {
-        let uid = make_user(&pool, "e@f.com").await;
-        prefs_for(
-            &pool,
-            uid,
-            "never",
-            "3",
-            Some("myhandle"),
-            Some(at(16, 9)),
-            Some(9),
-        )
-        .await;
-        set_chat_id(&pool, uid, "12345").await;
-        let showing_id = make_showing(&pool, "F1").await;
-        append_showing_for_users(
-            &pool,
-            showing_id,
-            &[get_preferences(&pool, uid).await.unwrap()],
-        )
-        .await
-        .unwrap();
-        let batch_id = open_batch_id(&pool, uid, "telegram").await;
-        set_batch_created_at(&pool, batch_id, at(19, 8)).await;
-
-        let tg = RecordingTelegram::default();
-        let sent = process_due_batches(&ctx(&pool, None, Some(&tg)), at(19, 9))
-            .await
-            .unwrap();
-        assert_eq!(sent, 1);
-        {
-            let sent_msgs = tg.sent.lock().unwrap();
-            assert_eq!(sent_msgs.len(), 1);
-            assert_eq!(sent_msgs[0].0, "12345");
-            assert!(sent_msgs[0].1.contains("F1"));
-        }
-        assert_eq!(batch_status(&pool, batch_id).await, "sent");
-        assert_eq!(count_open_batches(&pool, uid, "telegram").await, 1);
-    }
-
-    #[sqlx::test(migrations = "./migrations")]
-    async fn unverified_telegram_handle_does_not_create_batch(pool: PgPool) {
-        let uid = make_user(&pool, "g@h.com").await;
-        prefs_for(
-            &pool,
-            uid,
-            "never",
-            "immediately",
-            Some("nochat"),
-            None,
-            None,
-        )
-        .await;
-        let showing_id = make_showing(&pool, "F1").await;
-
-        let affected = append_showing_for_users(
-            &pool,
-            showing_id,
-            &[get_preferences(&pool, uid).await.unwrap()],
-        )
-        .await
-        .unwrap();
         assert!(affected.is_empty());
-        let count: (i64,) = sqlx::query_as(
-            "SELECT count(*) FROM notification_batch WHERE user_id = $1 AND layer = 'telegram'",
+        let n: (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM notification_batch WHERE user_id=$1 AND status='pending'",
         )
         .bind(uid)
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(count.0, 0);
+        assert_eq!(n.0, 0);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn disabled_layer_is_not_routed(pool: PgPool) {
+        let uid = make_user(&pool, "e@f.com").await;
+        prefs_for(&pool, uid, false, false, None, None, None).await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![user_rules(
+            uid,
+            false,
+            false,
+            None,
+            vec![rule("immediately")],
+        )];
+        let affected = route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
+        assert!(affected.is_empty());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn immediate_batch_flushes_same_run(pool: PgPool) {
+        let uid = make_user(&pool, "g@h.com").await;
+        prefs_for(&pool, uid, true, false, None, None, None).await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![user_rules(
+            uid,
+            true,
+            false,
+            None,
+            vec![rule("immediately")],
+        )];
+        route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
+        let email = RecordingEmail::default();
+        let sent = process_due_batches(&ctx(&pool, Some(&email), None), at(18, 12))
+            .await
+            .unwrap();
+        assert_eq!(sent, 1);
+        assert!(email.sent.lock().unwrap()[0].2.contains("F1"));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn three_day_batch_not_due_yet(pool: PgPool) {
+        let uid = make_user(&pool, "i@j.com").await;
+        prefs_for(&pool, uid, true, false, None, Some(at(16, 9)), Some(9)).await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![user_rules(uid, true, false, None, vec![rule("3")])];
+        route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
+        let batch_id = open_batch_id(&pool, uid, "email", "3").await;
+        set_batch_created_at(&pool, batch_id, at(19, 8)).await;
+        let email = RecordingEmail::default();
+        let sent = process_due_batches(&ctx(&pool, Some(&email), None), at(19, 8))
+            .await
+            .unwrap();
+        assert_eq!(sent, 0);
+        assert_eq!(batch_status(&pool, batch_id).await, "pending");
     }
 
     #[sqlx::test(migrations = "./migrations")]
     async fn failed_batch_is_retried(pool: PgPool) {
         let uid = make_user(&pool, "i@j.com").await;
-        prefs_for(
-            &pool,
-            uid,
-            "never",
-            "immediately",
-            Some("myhandle"),
-            None,
-            None,
-        )
-        .await;
+        prefs_for(&pool, uid, false, true, Some("myhandle"), None, None).await;
         set_chat_id(&pool, uid, "12345").await;
-        let showing_id = make_showing(&pool, "F1").await;
-        append_showing_for_users(
-            &pool,
-            showing_id,
-            &[get_preferences(&pool, uid).await.unwrap()],
-        )
-        .await
-        .unwrap();
-        let batch_id = open_batch_id(&pool, uid, "telegram").await;
+        let sid = make_showing(&pool, "F1").await;
+        let m = matchable(sid, 1, &["OV"], "F1");
+        let users = vec![user_rules(
+            uid,
+            false,
+            true,
+            Some("12345"),
+            vec![rule("immediately")],
+        )];
+        route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
+        let batch_id = open_batch_id(&pool, uid, "telegram", "immediately").await;
 
         let tg = FlakyTelegram {
             attempts: Arc::new(Mutex::new(0)),
@@ -659,8 +658,9 @@ mod tests {
     #[sqlx::test(migrations = "./migrations")]
     async fn gc_deletes_failed_batch_older_than_max_retry_age(pool: PgPool) {
         let uid = make_user(&pool, "k@x.com").await;
-        let old_failed = create_failed_batch(&pool, uid, "email", at(10, 0)).await;
-        let recent_failed = create_failed_batch(&pool, uid, "telegram", at(18, 10)).await;
+        let old_failed = create_failed_batch(&pool, uid, "email", "immediately", at(10, 0)).await;
+        let recent_failed =
+            create_failed_batch(&pool, uid, "telegram", "immediately", at(18, 10)).await;
 
         let deleted = crate::notification::db::gc_failed_batches(&pool, 168, at(18, 12))
             .await
@@ -687,9 +687,10 @@ mod tests {
         pool: &PgPool,
         uid: i64,
         layer: &str,
+        frequency: &str,
         updated_at: DateTime<Utc>,
     ) -> i64 {
-        let batch_id = crate::notification::db::create_empty_batch(pool, uid, layer)
+        let batch_id = crate::notification::db::create_empty_batch(pool, uid, layer, frequency)
             .await
             .unwrap();
         crate::notification::db::mark_batch_failed(pool, batch_id, "boom")

@@ -63,6 +63,12 @@
     "saveError": "Could not save preferences.",
     "loading": "Loading…",
     "telegramVerified": "Telegram account linked.",
-    "telegramVerifyPrompt": "Send any message to @ov_linzz_bot to link your account."
+    "telegramVerifyPrompt": "Send any message to @ov_linzz_bot to link your account.",
+    "rulesTitle": "Rules",
+    "rulesDesc": "First matching rule wins. Add a catch-all (any cinema, any feature) as the last rule.",
+    "anyCinema": "Any cinema",
+    "anyTitle": "any title",
+    "addRule": "Add rule",
+    "saveRules": "Save rules"
   }
 }

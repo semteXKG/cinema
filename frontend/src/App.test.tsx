@@ -38,6 +38,9 @@ function mockFetch(body: unknown, authed = false) {
       if (url.startsWith("/api/auth/providers")) {
         return { ok: true, json: async () => ({ email: true, google: true, github: true, dev: false }) };
       }
+      if (url.startsWith("/api/preferences/rules")) {
+        return { ok: true, json: async () => ({ rules: [], cinemas: [] }) };
+      }
       if (url.startsWith("/api/auth")) return { ok: false, status: 401 };
       return { ok: true, json: async () => body };
     })

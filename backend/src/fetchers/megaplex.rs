@@ -186,6 +186,7 @@ pub fn parse_megaplex_film_page(
             } else {
                 href.to_string()
             };
+            let combined = format!("{version} ");
             showings.push(Showing {
                 cinema: MEGAPLEX_CINEMA_NAME.to_string(),
                 movie: title.clone(),
@@ -193,11 +194,27 @@ pub fn parse_megaplex_film_page(
                 version,
                 hall: String::new(),
                 url: full_url,
+                features: crate::models::extract_features(&combined),
             });
         }
     }
     showings.sort_by_key(|s| s.start);
     Ok((showings, metas))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn megaplex_features_from_version() {
+        let version = megaplex_version("OV - IMAX 2D").unwrap();
+        let combined = format!("{version} ");
+        assert_eq!(
+            crate::models::extract_features(&combined),
+            vec!["OV", "IMAX", "2D"]
+        );
+    }
 }
 
 pub async fn fetch_megaplex(

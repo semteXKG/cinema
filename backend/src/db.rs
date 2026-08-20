@@ -53,10 +53,11 @@ pub async fn insert_showing(
     hall: &str,
     url: &str,
     first_seen: DateTime<Utc>,
+    features: &[String],
 ) -> sqlx::Result<Option<i64>> {
     let row: Option<(i64,)> = sqlx::query_as(
-        "INSERT INTO showing (movie_id, start, version, hall, url, first_seen_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        "INSERT INTO showing (movie_id, start, version, hall, url, first_seen_at, features)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (movie_id, start) DO NOTHING
          RETURNING id",
     )
@@ -66,6 +67,7 @@ pub async fn insert_showing(
     .bind(hall)
     .bind(url)
     .bind(first_seen)
+    .bind(features)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|r| r.0))
@@ -364,6 +366,36 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn showing_insert_persists_features(pool: PgPool) {
+        let mid = upsert_movie(&pool, "Cineplexx Linz", "F1", None, &[], None, None)
+            .await
+            .unwrap();
+        assert!(insert_showing(
+            &pool,
+            mid,
+            at(19),
+            "OV - IMAX 2D",
+            "",
+            "https://x",
+            at(12),
+            &["OV".into(), "IMAX".into(), "2D".into()],
+        )
+        .await
+        .unwrap()
+        .is_some());
+        let row: (Vec<String>,) =
+            sqlx::query_as("SELECT features FROM showing WHERE movie_id = $1")
+                .bind(mid)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            row.0,
+            vec!["OV".to_string(), "IMAX".to_string(), "2D".to_string()]
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn movie_upsert_updates_metadata(pool: PgPool) {
         let id1 = upsert_movie(
             &pool,
@@ -392,7 +424,7 @@ mod tests {
         assert!(view.is_empty()); // no showings yet
                                   // the second upsert must have overwritten the metadata
         assert!(
-            insert_showing(&pool, id2, at(19), "OV", "Saal 6", "https://x", at(12))
+            insert_showing(&pool, id2, at(19), "OV", "Saal 6", "https://x", at(12), &[])
                 .await
                 .unwrap()
                 .is_some()
@@ -410,13 +442,13 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12), &[])
                 .await
                 .unwrap()
                 .is_some()
         );
         assert!(
-            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12), &[])
                 .await
                 .unwrap()
                 .is_none()
@@ -437,7 +469,7 @@ mod tests {
         .await
         .unwrap();
         assert!(
-            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12))
+            insert_showing(&pool, mid, at(19), "OV", "Saal 6", "https://x", at(12), &[])
                 .await
                 .unwrap()
                 .is_some()
@@ -458,7 +490,7 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            insert_showing(&pool, mid, at(1), "OV", "", "https://x", at(0))
+            insert_showing(&pool, mid, at(1), "OV", "", "https://x", at(0), &[])
                 .await
                 .unwrap()
                 .is_some()

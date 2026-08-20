@@ -52,10 +52,27 @@ export const FREQUENCY_OPTIONS: NotificationFrequency[] = [
 ];
 
 export interface NotificationPreferences {
-  emailFrequency: NotificationFrequency;
-  telegramFrequency: NotificationFrequency;
+  emailEnabled: boolean;
+  telegramEnabled: boolean;
   telegramHandle: string;
   telegramVerified: boolean;
   digestAnchor: string;
   digestHour: number;
 }
+
+export const FEATURES = ["OV", "OmU", "OmdU", "2D", "3D", "IMAX", "Atmos", "DolbyCinema", "4DX"] as const;
+export type Feature = (typeof FEATURES)[number];
+
+export interface Cinema { id: number; name: string; }
+
+export interface NotificationRule {
+  id?: number;
+  position: number;
+  cinemaId: number | null;
+  cinemaName?: string | null;
+  features: string[];
+  titleSubstring: string | null;
+  frequency: NotificationFrequency;
+}
+
+export interface RulesResponse { rules: NotificationRule[]; cinemas: Cinema[]; }

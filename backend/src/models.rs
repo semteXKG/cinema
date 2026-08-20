@@ -9,6 +9,7 @@ pub struct Showing {
     pub version: String,
     pub hall: String,
     pub url: String,
+    pub features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -84,6 +85,39 @@ pub fn megaplex_version(label: &str) -> Option<String> {
     norm.starts_with("OV").then_some(norm)
 }
 
+static FEATURE_TOKENS: LazyLock<Vec<(&'static str, &'static str)>> = LazyLock::new(|| {
+    vec![
+        (r"\bOV\b", "OV"),
+        (r"\bOmdU\b", "OmdU"),
+        (r"\bOmU\b", "OmU"),
+        (r"\bIMAX\b", "IMAX"),
+        (r"\bDolby\s+Atmos\b|\bAtmos\b", "Atmos"),
+        (r"\bDolby\s+Cinema\b|\bDolby\s+Vision\b", "DolbyCinema"),
+        (r"\b3D\b", "3D"),
+        (r"\b2D\b", "2D"),
+        (r"\b4DX\b", "4DX"),
+    ]
+});
+
+static FEATURE_RES: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    FEATURE_TOKENS
+        .iter()
+        .map(|(pat, tok)| (Regex::new(&format!("(?i){pat}")).unwrap(), *tok))
+        .collect()
+});
+
+/// Extract normalized feature tags from combined text (version + hall +
+/// Cineplexx technologies/attributes). Deduped, vocab-ordered.
+pub fn extract_features(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (re, tok) in FEATURE_RES.iter() {
+        if re.is_match(text) && !out.iter().any(|t| t == tok) {
+            out.push((*tok).to_string());
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,7 +136,44 @@ mod tests {
             version: "OV".into(),
             hall: "Saal 6".into(),
             url: "https://cineplexx.at/film/die-odyssee".into(),
+            features: vec![],
         }
+    }
+
+    fn features(text: &str) -> Vec<String> {
+        super::extract_features(text)
+    }
+
+    #[test]
+    fn extract_megaplex_imax_2d() {
+        assert_eq!(features("OV - IMAX 2D"), vec!["OV", "IMAX", "2D"]);
+    }
+
+    #[test]
+    fn extract_dolby_atmos_is_atmos_not_dolbycinema() {
+        assert_eq!(features("OV - Dolby Atmos"), vec!["OV", "Atmos"]);
+    }
+
+    #[test]
+    fn extract_dolby_cinema_and_vision() {
+        assert_eq!(features("Dolby Cinema 2D"), vec!["DolbyCinema", "2D"]);
+        assert_eq!(features("OV - Dolby Vision"), vec!["OV", "DolbyCinema"]);
+    }
+
+    #[test]
+    fn extract_omu_and_omdu() {
+        assert_eq!(features("OmU"), vec!["OmU"]);
+        assert_eq!(features("OmdU (Englisch)"), vec!["OmdU"]);
+    }
+
+    #[test]
+    fn extract_unknown_yields_empty() {
+        assert!(features(" regulärer Text ").is_empty());
+    }
+
+    #[test]
+    fn extract_dedupes_and_preserves_vocab_order() {
+        assert_eq!(features("imax 3D IMAX"), vec!["IMAX", "3D"]);
     }
 
     #[test]
