@@ -70,7 +70,7 @@
     "channelBoth": "Beide",
     "telegramUnverified": "Telegram nicht verknüpft — diese Regel benachrichtigt nur per E-Mail, bis du verknüpfst.",
     "rulesTitle": "Regeln",
-    "rulesDesc": "Die erste passende Regel gewinnt. Leg als letzte Regel eine Auffangregel (beliebiges Kino, beliebiges Feature) an.",
+    "rulesDesc": "Die erste passende Regel gewinnt (von oben nach unten). Pfeile zum Sortieren.",
     "anyCinema": "Beliebiges Kino",
     "anyTitle": "beliebiger Titel",
     "addRule": "Regel hinzufügen",

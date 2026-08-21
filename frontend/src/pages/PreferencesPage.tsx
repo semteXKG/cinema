@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Marquee } from "../components/Marquee";
-import { FEATURES, FREQUENCY_OPTIONS, type NotificationChannel, type NotificationFrequency, type NotificationPreferences, type NotificationRule, type Cinema } from "../types";
+import { AddRuleChoice } from "../components/AddRuleChoice";
+import { RuleSentence } from "../components/RuleSentence";
+import type { NotificationPreferences, NotificationRule, Cinema } from "../types";
 import { fetchPreferences, savePreferences, fetchRules, saveRules } from "../api/preferences";
-import { frequencyLabel } from "../format";
 
 export function PreferencesPage() {
   const { t } = useTranslation();
@@ -14,6 +15,7 @@ export function PreferencesPage() {
   const [saved, setSaved] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,10 +50,19 @@ export function PreferencesPage() {
     }
   };
 
-  const addRule = () => setRules([...rules, { position: rules.length, cinemaId: null, features: [], titleSubstring: null, frequency: "3", channel: "both" }]);
+  const addRule = (rule: NotificationRule) => {
+    setRules([...rules, { ...rule, position: rules.length }]);
+    setAdding(false);
+  };
   const removeRule = (i: number) => setRules(rules.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, position: idx })));
   const updateRule = (i: number, patch: Partial<NotificationRule>) => setRules(rules.map((r, idx) => idx === i ? { ...r, ...patch } : r));
-  const toggleFeature = (i: number, f: string) => setRules(rules.map((r, idx) => idx === i ? { ...r, features: r.features.includes(f) ? r.features.filter((x) => x !== f) : [...r.features, f] } : r));
+  const moveRule = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= rules.length) return;
+    const next = [...rules];
+    const tmp = next[i]; next[i] = next[j]; next[j] = tmp;
+    setRules(next.map((r, idx) => ({ ...r, position: idx })));
+  };
   const handleSaveRules = async () => { const res = await saveRules(rules); setRules(res.rules); setRulesSaved(true); };
 
   if (loading) return <div className="preferences"><Marquee /><p>{t("preferences.loading")}</p></div>;
@@ -59,7 +70,6 @@ export function PreferencesPage() {
   if (!prefs) return null;
 
   const telegramUnverified = !prefs.telegramVerified;
-  const channels: NotificationChannel[] = ["email", "telegram", "both"];
 
   return (
     <div className="preferences">
@@ -94,36 +104,28 @@ export function PreferencesPage() {
       <h3>{t("preferences.rulesTitle")}</h3>
       <p className="pref-desc">{t("preferences.rulesDesc")}</p>
       {rules.map((r, i) => (
-        <div className="card pref-card" key={i}>
-          <div className="rule-row">
-            <select aria-label={"Rule " + (i + 1) + " cinema"} value={r.cinemaId ?? ""} onChange={(e) => updateRule(i, { cinemaId: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">{t("preferences.anyCinema")}</option>
-              {cinemas.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <input aria-label={"Rule " + (i + 1) + " title"} placeholder={t("preferences.anyTitle")} value={r.titleSubstring ?? ""} onChange={(e) => updateRule(i, { titleSubstring: e.target.value || null })} />
-            <select aria-label={"Rule " + (i + 1) + " channel"} value={r.channel} onChange={(e) => updateRule(i, { channel: e.target.value as NotificationChannel })}>
-              {channels.map((c) => <option key={c} value={c}>{t("preferences.channel" + (c.charAt(0).toUpperCase() + c.slice(1)))}</option>)}
-            </select>
-            <select aria-label={"Rule " + (i + 1) + " frequency"} value={r.frequency} onChange={(e) => updateRule(i, { frequency: e.target.value as NotificationFrequency })}>
-              {FREQUENCY_OPTIONS.map((v) => <option key={v} value={v}>{frequencyLabel(t, v)}</option>)}
-            </select>
-            <button className="rule-remove" onClick={() => removeRule(i)}>x</button>
-          </div>
-          <div className="rule-features">
-            {FEATURES.map((f) => (
-              <button key={f} className={"chip " + (r.features.includes(f) ? "chip-on" : "")} onClick={() => toggleFeature(i, f)}>{f}</button>
-            ))}
-            {(r.channel === "telegram" || r.channel === "both") && telegramUnverified && (
-              <span className="rule-warn">{t("preferences.telegramUnverified")}</span>
-            )}
-          </div>
-        </div>
+        <RuleSentence
+          key={i}
+          rule={r}
+          index={i}
+          total={rules.length}
+          cinemas={cinemas}
+          telegramUnverified={telegramUnverified}
+          onChange={(patch) => updateRule(i, patch)}
+          onRemove={() => removeRule(i)}
+          onMoveUp={() => moveRule(i, -1)}
+          onMoveDown={() => moveRule(i, 1)}
+        />
       ))}
-      <div className="pref-actions">
-        <button className="auth-submit" onClick={addRule}>{t("preferences.addRule")}</button>
-        <button className="auth-submit" onClick={handleSaveRules}>{t("preferences.saveRules")}</button>
-        {rulesSaved && <span className="pref-saved">{t("preferences.saved")}</span>}
-      </div>
+      {adding ? (
+        <AddRuleChoice onAdd={addRule} />
+      ) : (
+        <div className="pref-actions">
+          <button className="auth-submit" onClick={() => setAdding(true)}>{t("preferences.addRule")}</button>
+          <button className="auth-submit" onClick={handleSaveRules}>{t("preferences.saveRules")}</button>
+          {rulesSaved && <span className="pref-saved">{t("preferences.saved")}</span>}
+        </div>
+      )}
     </div>
   );
 }

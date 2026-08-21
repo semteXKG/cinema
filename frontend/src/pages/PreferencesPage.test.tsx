@@ -37,7 +37,7 @@ function renderPage() {
       <AuthProvider>
         <PreferencesPage />
       </AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -59,7 +59,7 @@ describe("PreferencesPage", () => {
     expect(screen.getByLabelText("Telegram handle")).toHaveValue("myhandle");
   });
 
-  it("adds a rule, picks a channel, and saves the mapped channels array", async () => {
+  it("starts a new rule, toggles Telegram off, and saves the mapped channels", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.startsWith("/api/auth/me")) return { ok: true, json: async () => ({ id: 1, email: "a@b.c" }) };
@@ -74,15 +74,16 @@ describe("PreferencesPage", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderPage();
     await screen.findByRole("heading", { name: "Notification preferences" });
-    fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
-    const channel = await screen.findByLabelText("Rule 1 channel");
-    fireEvent.change(channel, { target: { value: "telegram" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save rules" }));
+    fireEvent.click(screen.getByRole("button", { name: /Add rule/i }));
+    fireEvent.click(screen.getByText("Start new"));
+    const telegramPill = await screen.findByRole("button", { name: /^Telegram$/i });
+    fireEvent.click(telegramPill);
+    fireEvent.click(screen.getByRole("button", { name: /Save rules/i }));
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([u, i]) => String(u).startsWith("/api/preferences/rules") && i && i.method === "PUT");
       expect(put).toBeDefined();
       const body = JSON.parse(String(put![1]!.body));
-      expect(body.rules[0].channels).toEqual(["telegram"]);
+      expect(body.rules[0].channels).toEqual(["email"]);
     });
   });
 

@@ -70,7 +70,7 @@
     "channelBoth": "Both",
     "telegramUnverified": "Telegram not linked — this rule will only email until you verify.",
     "rulesTitle": "Rules",
-    "rulesDesc": "First matching rule wins. Add a catch-all (any cinema, any feature) as the last rule.",
+    "rulesDesc": "First matching rule wins (top to bottom). Use the arrows to reorder.",
     "anyCinema": "Any cinema",
     "anyTitle": "any title",
     "addRule": "Add rule",
