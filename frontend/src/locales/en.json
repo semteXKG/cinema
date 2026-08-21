@@ -85,6 +85,13 @@
     "templateDigestEmail": "Weekly digest via email",
     "templateDigestEmailSummary": "Any cinema · all features · every 7 days · email",
     "templateInstantAll": "Instant alert for everything, both channels",
-    "templateInstantAllSummary": "Any cinema · all features · instantly · both"
+    "templateInstantAllSummary": "Any cinema · all features · instantly · both",
+    "sentencePrefix": "Notify me when",
+    "sentenceShows": "shows a movie",
+    "sentenceWith": "with",
+    "sentenceAny": "(any)",
+    "sentenceTitleContains": "title contains",
+    "sentenceSend": "and send it",
+    "sentenceOver": "via"
   }
 }

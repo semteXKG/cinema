@@ -1,15 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import { Marquee } from "../components/Marquee";
 import { FEATURES, FREQUENCY_OPTIONS, type NotificationChannel, type NotificationFrequency, type NotificationPreferences, type NotificationRule, type Cinema } from "../types";
 import { fetchPreferences, savePreferences, fetchRules, saveRules } from "../api/preferences";
-
-function frequencyLabel(t: TFunction, value: NotificationFrequency): string {
-  if (value === "never") return t("preferences.frequencies.never");
-  if (value === "immediately") return t("preferences.frequencies.immediately");
-  return t("preferences.frequencies.days", { count: Number(value) });
-}
+import { frequencyLabel } from "../format";
 
 export function PreferencesPage() {
   const { t } = useTranslation();

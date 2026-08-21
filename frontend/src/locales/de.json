@@ -85,6 +85,13 @@
     "templateDigestEmail": "Wöchentlicher Digest per E-Mail",
     "templateDigestEmailSummary": "Beliebiges Kino · alle Features · alle 7 Tage · E-Mail",
     "templateInstantAll": "Sofort-Alarm für alles, beide Kanäle",
-    "templateInstantAllSummary": "Beliebiges Kino · alle Features · sofort · beides"
+    "templateInstantAllSummary": "Beliebiges Kino · alle Features · sofort · beides",
+    "sentencePrefix": "Benachrichtige mich, wenn",
+    "sentenceShows": "einen Film zeigt",
+    "sentenceWith": "mit",
+    "sentenceAny": "(beliebig)",
+    "sentenceTitleContains": "Titel enthält",
+    "sentenceSend": "und schicke es",
+    "sentenceOver": "über"
   }
 }

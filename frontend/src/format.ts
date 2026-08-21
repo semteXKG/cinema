@@ -1,4 +1,6 @@
 import i18n from "./i18n";
+import type { TFunction } from "i18next";
+import type { NotificationFrequency } from "./types";
 
 function locale() {
   return i18n.language;
@@ -26,4 +28,10 @@ export function formatGeneratedAt(iso: string): string {
     dateStyle: "short",
     timeStyle: "short",
   }).format(d);
+}
+
+export function frequencyLabel(t: TFunction, value: NotificationFrequency): string {
+  if (value === "never") return t("preferences.frequencies.never");
+  if (value === "immediately") return t("preferences.frequencies.immediately");
+  return t("preferences.frequencies.days", { count: Number(value) });
 }
