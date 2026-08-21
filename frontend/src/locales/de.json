@@ -75,6 +75,16 @@
     "anyTitle": "beliebiger Titel",
     "addRule": "Regel hinzufügen",
     "saveRules": "Regeln speichern",
-    "addFeature": "+ Feature"
+    "addFeature": "+ Feature",
+    "addRuleFromTemplate": "Aus Vorlage erstellen",
+    "addRuleNew": "Neue Regel starten",
+    "addRuleFromTemplateDesc": "Schnellstart mit einer fertigen Regel",
+    "addRuleNewDesc": "Leerer Satz, alles einstellbar",
+    "templateOvTelegram": "Alle OV-Vorstellungen sofort per Telegram",
+    "templateOvTelegramSummary": "Beliebiges Kino · OV · sofort · Telegram",
+    "templateDigestEmail": "Wöchentlicher Digest per E-Mail",
+    "templateDigestEmailSummary": "Beliebiges Kino · alle Features · alle 7 Tage · E-Mail",
+    "templateInstantAll": "Sofort-Alarm für alles, beide Kanäle",
+    "templateInstantAllSummary": "Beliebiges Kino · alle Features · sofort · beides"
   }
 }

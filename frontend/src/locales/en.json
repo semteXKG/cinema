@@ -75,6 +75,16 @@
     "anyTitle": "any title",
     "addRule": "Add rule",
     "saveRules": "Save rules",
-    "addFeature": "+ Feature"
+    "addFeature": "+ Feature",
+    "addRuleFromTemplate": "From a template",
+    "addRuleNew": "Start new",
+    "addRuleFromTemplateDesc": "Quick-start with a ready-made rule",
+    "addRuleNewDesc": "Blank sentence, all yours",
+    "templateOvTelegram": "All OV showings instantly via Telegram",
+    "templateOvTelegramSummary": "Any cinema · OV · instantly · Telegram",
+    "templateDigestEmail": "Weekly digest via email",
+    "templateDigestEmailSummary": "Any cinema · all features · every 7 days · email",
+    "templateInstantAll": "Instant alert for everything, both channels",
+    "templateInstantAllSummary": "Any cinema · all features · instantly · both"
   }
 }
