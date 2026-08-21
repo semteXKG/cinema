@@ -680,7 +680,9 @@ mod tests {
                 channels: vec!["telegram".into()],
             }],
         }];
-        let affected = route_showing_for_users(&pool, sid, &m, &users).await.unwrap();
+        let affected = route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
         assert_eq!(affected, vec![(uid, "telegram".to_string())]);
         let n: (i64,) = sqlx::query_as(
             "SELECT count(*) FROM notification_batch WHERE user_id=$1 AND layer='telegram' AND frequency='immediately' AND status='pending'",
@@ -707,7 +709,9 @@ mod tests {
                 channels: vec!["telegram".into()],
             }],
         }];
-        let affected = route_showing_for_users(&pool, sid, &m, &users).await.unwrap();
+        let affected = route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
         assert!(affected.is_empty());
     }
 
@@ -731,8 +735,13 @@ mod tests {
                 channels: vec!["email".into(), "telegram".into()],
             }],
         }];
-        let affected = route_showing_for_users(&pool, sid, &m, &users).await.unwrap();
-        assert_eq!(affected, vec![(uid, "email".to_string()), (uid, "telegram".to_string())]);
+        let affected = route_showing_for_users(&pool, sid, &m, &users)
+            .await
+            .unwrap();
+        assert_eq!(
+            affected,
+            vec![(uid, "email".to_string()), (uid, "telegram".to_string())]
+        );
     }
 
     #[sqlx::test(migrations = "./migrations")]

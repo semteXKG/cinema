@@ -301,7 +301,12 @@ fn validate_rules(
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
-        if r.channels.is_empty() || !r.channels.iter().all(|c| valid_channels.contains(&c.as_str())) {
+        if r.channels.is_empty()
+            || !r
+                .channels
+                .iter()
+                .all(|c| valid_channels.contains(&c.as_str()))
+        {
             return Err(StatusCode::BAD_REQUEST);
         }
     }
@@ -489,9 +494,7 @@ mod tests {
                 Request::put("/api/preferences")
                     .header("Cookie", format!("ov_session={token}"))
                     .header("Content-Type", "application/json")
-                    .body(axum::body::Body::from(
-                        r#"{"telegramHandle":"@h"}"#,
-                    ))
+                    .body(axum::body::Body::from(r#"{"telegramHandle":"@h"}"#))
                     .unwrap(),
             )
             .await
@@ -504,7 +507,10 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(email_count.0, 1, "email batch not rolled over (handle-only change)");
+        assert_eq!(
+            email_count.0, 1,
+            "email batch not rolled over (handle-only change)"
+        );
         let telegram_count: (i64,) =
             sqlx::query_as("SELECT count(*) FROM notification_batch WHERE user_id = $1 AND layer = 'telegram' AND status = 'pending'")
                 .bind(uid)

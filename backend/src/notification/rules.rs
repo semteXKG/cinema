@@ -39,6 +39,7 @@ pub fn matches(rule: &Rule, s: &MatchableShowing) -> bool {
     true
 }
 
+#[allow(clippy::manual_find)]
 pub fn first_match<'a>(rules: &'a [Rule], s: &MatchableShowing) -> Option<&'a Rule> {
     for r in rules {
         if matches(r, s) {
