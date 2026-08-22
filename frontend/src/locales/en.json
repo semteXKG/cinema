@@ -91,7 +91,7 @@
     "sentenceShows": "shows",
     "sentenceWith": "with",
     "sentenceAnyFeature": "any features",
-    "sentenceTitleContains": "title contains",
+    "sentenceTitleContains": "and title contains",
     "sentenceSendImmediate": "Send notification",
     "sentenceSendDigest": "Send notification digest",
     "sentenceOver": "via"
