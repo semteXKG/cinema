@@ -48,78 +48,84 @@ export function RuleSentence({ rule, index, total, cinemas, telegramUnverified, 
   return (
     <div className="card pref-card sentence-card">
       <div className="sentence" aria-label={"Rule " + (index + 1)}>
-        <span className="sentence-text">{t("preferences.sentencePrefix")}</span>{" "}
-        <PillDropdown
-          ariaLabel={"Rule " + (index + 1) + " cinema"}
-          value={rule.cinemaId == null ? "" : String(rule.cinemaId)}
-          options={cinemaOptions}
-          onChange={(v) => onChange({ cinemaId: v ? Number(v) : null })}
-        />{" "}
-        <span className="sentence-text">{t("preferences.sentenceFilm")}</span>{" "}
-        <span className="sentence-text">{t("preferences.sentenceWith")}</span>{" "}
-        {rule.features.length === 0 ? (
-          <span className="sentence-any">{t("preferences.sentenceAnyFeature")}</span>
-        ) : (
-          rule.features.map((f) => (
-            <button
-              key={f}
-              type="button"
-              className="pill pill-on pill-feature"
-              aria-label={"remove " + f}
-              onClick={() => toggleFeature(f)}
-            >
-              {f} ✕
-            </button>
-          ))
-        )}
-        <FeaturePopover selected={rule.features} onToggle={toggleFeature} />{" "}
-        <span className="sentence-text">{t("preferences.sentenceShows")}</span>{" "}
-        <span className="sentence-text">{t("preferences.sentenceTitleContains")}</span>{" "}
-        <input
-          className="pref-input sentence-title"
-          type="text"
-          placeholder={t("preferences.anyTitle")}
-          value={rule.titleSubstring ?? ""}
-          onChange={(e) => onChange({ titleSubstring: e.target.value || null })}
-          aria-label={"Rule " + (index + 1) + " title"}
-        />
-        {isNever ? null : (
-          <>
-            <span className="sentence-text">
-              {rule.frequency === "immediately"
-                ? t("preferences.sentenceSendImmediate")
-                : t("preferences.sentenceSendDigest")}
-            </span>{" "}
-            <PillDropdown
-              ariaLabel={"Rule " + (index + 1) + " frequency"}
-              value={rule.frequency}
-              options={frequencyOptions}
-              onChange={(v) => onChange({ frequency: v as NotificationFrequency })}
-            />{" "}
-            <span className="sentence-text">{t("preferences.sentenceOver")}</span>{" "}
-            <button
-              type="button"
-              className={"pill " + (emailOn ? "pill-on" : "")}
-              aria-label="Email"
-              disabled={emailOn && !telegramOn}
-              onClick={() => toggleChannel("email")}
-            >
-              {emailOn ? "✓ " : ""}{t("preferences.channelEmail")}
-            </button>
-            <button
-              type="button"
-              className={"pill " + (telegramOn ? "pill-on" : "")}
-              aria-label="Telegram"
-              disabled={telegramOn && !emailOn}
-              onClick={() => toggleChannel("telegram")}
-            >
-              {telegramOn ? "✓ " : ""}{t("preferences.channelTelegram")}
-            </button>
-          </>
-        )}
-        {(rule.channel === "telegram" || rule.channel === "both") && telegramUnverified && !isNever && (
-          <span className="rule-warn">{t("preferences.telegramUnverified")}</span>
-        )}
+        <div className="sentence-line">
+          <span className="sentence-text">{t("preferences.sentencePrefix")}</span>{" "}
+          <PillDropdown
+            ariaLabel={"Rule " + (index + 1) + " cinema"}
+            value={rule.cinemaId == null ? "" : String(rule.cinemaId)}
+            options={cinemaOptions}
+            onChange={(v) => onChange({ cinemaId: v ? Number(v) : null })}
+          />{" "}
+          <span className="sentence-text">{t("preferences.sentenceFilm")}</span>{" "}
+          <span className="sentence-text">{t("preferences.sentenceWith")}</span>{" "}
+          {rule.features.length === 0 ? (
+            <span className="sentence-any">{t("preferences.sentenceAnyFeature")}</span>
+          ) : (
+            rule.features.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className="pill pill-on pill-feature"
+                aria-label={"remove " + f}
+                onClick={() => toggleFeature(f)}
+              >
+                {f} ✕
+              </button>
+            ))
+          )}
+          <FeaturePopover selected={rule.features} onToggle={toggleFeature} />{" "}
+          <span className="sentence-text">{t("preferences.sentenceShows")}</span>
+        </div>
+        <div className="sentence-line">
+          <span className="sentence-text">{t("preferences.sentenceTitleContains")}</span>{" "}
+          <input
+            className="pref-input sentence-title"
+            type="text"
+            placeholder={t("preferences.anyTitle")}
+            value={rule.titleSubstring ?? ""}
+            onChange={(e) => onChange({ titleSubstring: e.target.value || null })}
+            aria-label={"Rule " + (index + 1) + " title"}
+          />
+          {isNever ? (
+            <span className="sentence-text">{t("preferences.frequencies.never")}</span>
+          ) : (
+            <>
+              <span className="sentence-text">
+                {rule.frequency === "immediately"
+                  ? t("preferences.sentenceSendImmediate")
+                  : t("preferences.sentenceSendDigest")}
+              </span>{" "}
+              <PillDropdown
+                ariaLabel={"Rule " + (index + 1) + " frequency"}
+                value={rule.frequency}
+                options={frequencyOptions}
+                onChange={(v) => onChange({ frequency: v as NotificationFrequency })}
+              />{" "}
+              <span className="sentence-text">{t("preferences.sentenceOver")}</span>{" "}
+              <button
+                type="button"
+                className={"pill " + (emailOn ? "pill-on" : "")}
+                aria-label="Email"
+                disabled={emailOn && !telegramOn}
+                onClick={() => toggleChannel("email")}
+              >
+                {emailOn ? "✓ " : ""}{t("preferences.channelEmail")}
+              </button>
+              <button
+                type="button"
+                className={"pill " + (telegramOn ? "pill-on" : "")}
+                aria-label="Telegram"
+                disabled={telegramOn && !emailOn}
+                onClick={() => toggleChannel("telegram")}
+              >
+                {telegramOn ? "✓ " : ""}{t("preferences.channelTelegram")}
+              </button>
+            </>
+          )}
+          {(rule.channel === "telegram" || rule.channel === "both") && telegramUnverified && !isNever && (
+            <span className="rule-warn">{t("preferences.telegramUnverified")}</span>
+          )}
+        </div>
         <span className="rule-actions">
           <button type="button" className="rule-remove" aria-label="remove rule" onClick={onRemove}>x</button>
           <button type="button" className="rule-move" aria-label="move up" disabled={index === 0} onClick={onMoveUp}>^</button>
