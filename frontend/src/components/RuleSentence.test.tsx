@@ -35,8 +35,8 @@ function renderRule(overrides: Partial<Parameters<typeof RuleSentence>[0]> = {})
 describe("RuleSentence", () => {
   it("renders the sentence with the default rule", () => {
     renderRule();
-    expect(screen.getByText(/Notify me when/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cinema/i })).toHaveTextContent("Any cinema");
+    expect(screen.getByText("Features")).toBeInTheDocument();
   });
 
   it("toggling Email off (when Telegram still on) sets channel to telegram", () => {
