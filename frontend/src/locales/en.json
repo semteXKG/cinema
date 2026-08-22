@@ -53,9 +53,9 @@
     "telegramHandlePlaceholder": "@yourhandle",
     "frequencies": {
       "never": "Never",
-      "immediately": "Immediately",
-      "days_one": "{{count}} day",
-      "days_other": "{{count}} days"
+      "immediately": "immediately",
+      "days_one": "every day",
+      "days_other": "every {{count}} days"
     },
     "save": "Save",
     "saved": "Saved",
@@ -87,11 +87,13 @@
     "templateInstantAll": "Instant alert for everything, both channels",
     "templateInstantAllSummary": "Any cinema · all features · instantly · both",
     "sentencePrefix": "Notify me when",
-    "sentenceShows": "shows a movie",
+    "sentenceFilm": "a movie",
+    "sentenceShows": "shows",
     "sentenceWith": "with",
-    "sentenceAny": "(any)",
+    "sentenceAnyFeature": "any features",
     "sentenceTitleContains": "title contains",
-    "sentenceSend": "and send it",
+    "sentenceSendImmediate": "Send notification",
+    "sentenceSendDigest": "Send notification digest",
     "sentenceOver": "via"
   }
 }

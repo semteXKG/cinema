@@ -55,10 +55,10 @@ export function RuleSentence({ rule, index, total, cinemas, telegramUnverified, 
           options={cinemaOptions}
           onChange={(v) => onChange({ cinemaId: v ? Number(v) : null })}
         />{" "}
-        <span className="sentence-text">{t("preferences.sentenceShows")}</span>{" "}
+        <span className="sentence-text">{t("preferences.sentenceFilm")}</span>{" "}
         <span className="sentence-text">{t("preferences.sentenceWith")}</span>{" "}
         {rule.features.length === 0 ? (
-          <span className="sentence-any">{t("preferences.sentenceAny")}</span>
+          <span className="sentence-any">{t("preferences.sentenceAnyFeature")}</span>
         ) : (
           rule.features.map((f) => (
             <button
@@ -73,6 +73,7 @@ export function RuleSentence({ rule, index, total, cinemas, telegramUnverified, 
           ))
         )}
         <FeaturePopover selected={rule.features} onToggle={toggleFeature} />{" "}
+        <span className="sentence-text">{t("preferences.sentenceShows")}</span>{" "}
         <span className="sentence-text">{t("preferences.sentenceTitleContains")}</span>{" "}
         <input
           className="pref-input sentence-title"
@@ -84,7 +85,11 @@ export function RuleSentence({ rule, index, total, cinemas, telegramUnverified, 
         />
         {isNever ? null : (
           <>
-            <span className="sentence-text">{t("preferences.sentenceSend")}</span>{" "}
+            <span className="sentence-text">
+              {rule.frequency === "immediately"
+                ? t("preferences.sentenceSendImmediate")
+                : t("preferences.sentenceSendDigest")}
+            </span>{" "}
             <PillDropdown
               ariaLabel={"Rule " + (index + 1) + " frequency"}
               value={rule.frequency}
