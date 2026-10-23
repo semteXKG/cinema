@@ -46,7 +46,7 @@ jobs:
         working-directory: backend
         run: |
           cargo fmt --check
-          cargo clippy -- -D warnings
+          cargo clippy -- -D warnings -A clippy::double_must_use  # fires on async_trait-generated code since Rust 1.99
           cargo test
 
       - name: Set up Node
